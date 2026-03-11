@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { SCHEMA } from "../../Utils/Constant.js";
+import Property from "./Property.js";
 
 const Saltround = Number(process.env.SALT_ROUNDS) || 10;
 
@@ -39,7 +40,19 @@ const BrokerSchema = new SCHEMA(
     
     // Signed agreement uploaded by admin
     brokerageagreement: { type: String }, 
-
+     myclients: [{
+      name: { type: String },
+      Propertyquery: { type: String },
+      deadline: { type: Date },
+      status: { type: Boolean, default: false },
+      assigneddate: { 
+        type: Date, 
+        default: Date.now // 🟢 FIX: Automatically sets to the current date & time
+      },
+      email: { type: String },
+      phone: { type: String },
+      remark: { type: String }
+    }],
     // ==========================================
     // 4. PLATFORM CONTROL & PAYWALL LOGIC
     // ==========================================

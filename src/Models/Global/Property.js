@@ -28,7 +28,7 @@ const PropertySchema = new SCHEMA(
     carpetarea: { type: String, required: true },
     superbuilderarea: { type: String, required: true },
     landarea: { type: String, required: true },
-    verified:{ type: Boolean, default: false},
+    verified: { type: Boolean, default: false },
     noofbedrooms: { type: String, required: isResidential },
     noofbathrooms: { type: String, required: isResidential },  
     noofhalls: { type: String, required: isResidential },
@@ -40,17 +40,24 @@ const PropertySchema = new SCHEMA(
     description: { type: String, required: true },
     amenities: [{ type: String, required: true }],
     
+    // 🟢 RELAXED: No longer required, so brokers can add properties without an owner ID
     ownedby: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "PropertyOwner",
-        required: true
+        ref: "PropertyOwner"
     },
 
     assignedBrokers: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Broker" 
     }],
-propertypapers:[{type:String},],
+
+    // 🟢 TRACKING: Remembers which broker created this property
+    addedByBroker: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Broker"
+    },
+
+    propertypapers: [{type:String}],
     visibilitySettings: {
         showAddressToFreeBrokers: { type: Boolean, default: false },
         showOwnerDetailsToFreeBrokers: { type: Boolean, default: false },
@@ -60,10 +67,7 @@ propertypapers:[{type:String},],
   { timestamps: true }
 );
 
-// ==========================================
-// NEW: CUSTOM FILTER METHOD FOR FREE BROKERS
-// ==========================================
-// This method securely packages ONLY the data allowed for the free scheme.
+// Custom method securely packages ONLY the data allowed for the free scheme.
 PropertySchema.methods.toFreeTierJSON = function() {
   return {
     _id: this._id,
@@ -72,7 +76,6 @@ PropertySchema.methods.toFreeTierJSON = function() {
     carpetarea: this.carpetarea,
     furnished: this.furnished,
     amenities: this.amenities,
-    // Notice how we only extract city and state, completely ignoring houseno, street, etc.
     address: {
       city: this.address?.city,
       state: this.address?.state
