@@ -52,7 +52,7 @@ console.log("SCHEMA CHECK:", typeDefs.includes("loginAdmin") ? "✅ NEW SCHEMA L
   app.use(
     '/graphql',
     cors({
-      origin: ["http://localhost:5173", "https://xoloerp.com", "https://fingertip.co.in"],
+      origin: ["http://localhost:5173", "http://localhost:8080", "https://xoloerp.com", "https://fingertip.co.in"],
       credentials: true,
     }),
     express.json(),

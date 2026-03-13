@@ -11,7 +11,10 @@ const PropertySchema = new SCHEMA(
   {
     type: { type: String, required: true },
     name: { type: String, required: true, unique: true },
+    
+    // 🟢 MEDIA FIELDS
     img: [{ type: String, required: true }],
+    video: [{ type: String }], // 🟢 NEW: Array to store multiple video URLs
     
     address: {
         houseno: { type: String, required: true },
@@ -40,10 +43,34 @@ const PropertySchema = new SCHEMA(
     description: { type: String, required: true },
     amenities: [{ type: String, required: true }],
     
-    // 🟢 RELAXED: No longer required, so brokers can add properties without an owner ID
+    // ==========================================
+    // 🟢 PRICING & LISTING TYPE FIELDS
+    // ==========================================
+    price: { type: String }, // Can represent total price or monthly rent
+    maintenanceCost: { type: String }, 
+    rental: { type: Boolean, default: false },
+    selling: { type: Boolean, default: false },
+
+    // ==========================================
+    // 🟢 OWNER TRACKING
+    // ==========================================
+    
+    // 1. Registered Platform Owner (If the owner has an account on your app)
     ownedby: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "PropertyOwner"
+    },
+
+    // 2. Offline Owner Details (Manually typed by Broker during property addition)
+    brokerOwnerDetails: {
+        ownerType: { type: String, enum: ['Individual', 'Company'] }, // Determines if Company Name is needed
+        companyName: { type: String }, // Only filled if ownerType is 'Company'
+        ownerName: { type: String },
+        ownerPhone: { type: String },
+        contactPersonName: { type: String },
+        contactPersonPhone: { type: String },
+        keyPersonName: { type: String },
+        keyPersonPhone: { type: String }
     },
 
     assignedBrokers: [{
@@ -51,7 +78,7 @@ const PropertySchema = new SCHEMA(
         ref: "Broker" 
     }],
 
-    // 🟢 TRACKING: Remembers which broker created this property
+    // Tracks which broker actually created this property listing
     addedByBroker: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Broker"
@@ -76,6 +103,9 @@ PropertySchema.methods.toFreeTierJSON = function() {
     carpetarea: this.carpetarea,
     furnished: this.furnished,
     amenities: this.amenities,
+    price: this.price,         // Exposing pricing to free tier so they can see the cost
+    rental: this.rental,
+    selling: this.selling,
     address: {
       city: this.address?.city,
       state: this.address?.state
