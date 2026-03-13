@@ -15,8 +15,9 @@ const DB_Connection = async (db_uri, db_name) => {
     catch(err){
         console.error("Database connection failed:", err);
         process.exit(1); 
-        process.exit(1); 
+   
     }
 }
 export default DB_Connection;
+
 
