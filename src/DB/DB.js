@@ -5,6 +5,9 @@ const DB_Connection = async (db_uri, db_name) => {
     console.log(`data base name:${db_name}`);
     console.log(`data base url:${db_uri}`);
 
+    console.log(`data base name:${db_name}`);
+    console.log(`data base url:${db_uri}`);
+
     try {
         // 🟢 FIX: Use the dbName option instead of `${db_uri}/${db_name}`
         const DB_Initialization = await mongoose.connect(db_uri, {
@@ -19,3 +22,5 @@ const DB_Connection = async (db_uri, db_name) => {
     }
 }
 export default DB_Connection;
+
+
