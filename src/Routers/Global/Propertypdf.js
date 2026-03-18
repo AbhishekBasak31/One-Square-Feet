@@ -3,9 +3,9 @@ import puppeteer from 'puppeteer';
 import axios from 'axios';
 import Property from '../../Models/Global/Property.js'; 
 
-const router = express.Router();
+const Propertypdf = express.Router();
 
-router.get('/:id', async (req, res) => {
+Propertypdf.get('/:id', async (req, res) => {
   console.log(`\n✅ PDF Route successfully hit for Property ID: ${req.params.id}`);
   
   try {
@@ -198,4 +198,4 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-export default router;
+export default Propertypdf;

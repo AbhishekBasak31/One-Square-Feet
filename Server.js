@@ -21,6 +21,7 @@ import PropertyOwner from "./src/Models/Global/Owner.js";
 import Propertypdf from "./src/Routers/Global/propertypdf.js";
 
 
+
 const app = express();
 const PORT = process.env.PORT || 7000; // ✅ RUNNING ON 7000
 
