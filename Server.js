@@ -18,7 +18,7 @@ import UploadRouter from "./src/Routers/Global/Upload.js";
 import Admin from "./src/Models/Global/User.js";
 import Broker from "./src/Models/Global/Broker.js";
 import PropertyOwner from "./src/Models/Global/Owner.js";
-import Propertypdf from "./src/Routers/Global/propertypdf.js";
+import Propertypdf from "./src/Routers/Global/Propertypdf.js";
 
 
 
