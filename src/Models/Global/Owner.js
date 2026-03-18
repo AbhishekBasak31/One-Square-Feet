@@ -7,12 +7,17 @@ const Saltround = Number(process.env.SALT_ROUNDS) || 10;
 
 const OwnerSchema = new SCHEMA(
   {
+     ownerType: { type: String, enum: ['Individual', 'Company'] }, 
+      companyName: { type: String }, 
     name: { type: String, required: true }, 
     email: { type: String, required: true, unique: true },
     phone: { type: String, required: true }, 
     password: { type: String, required: true },
     address: { type: String, required: true },
-
+    contactPersonName: { type: String },
+    contactPersonPhone: { type: String },
+    keyPersonName: { type: String },
+    keyPersonPhone: { type: String },
     // --- PAYWALL & ADMIN CONTROL ---
     planType: { 
         type: String, 

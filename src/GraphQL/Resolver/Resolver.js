@@ -67,15 +67,21 @@ export const resolvers = {
       else if (context.user.role === "BROKER") {
         filter.addedByBroker = getBrokerIdFromCookie(context); 
       }
-      return await Property.find(filter).sort({ createdAt: -1 }).populate("ownedby").populate("assignedBrokers");
+      return await Property.find(filter)
+        .sort({ createdAt: -1 })
+        .populate("ownedby")
+        .populate("assignedBrokers")
+        .populate("addedByBroker"); 
     },
-
-    // 🟢 UPDATED: Checks if broker was assigned OR if they created it
     getPropertyById: async (_, { id }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) {
         throw new Error("Unauthorized: You do not have permission to view this.");
       }
-      const property = await Property.findById(id).populate("ownedby").populate("assignedBrokers");
+      const property = await Property.findById(id)
+        .populate("ownedby")
+        .populate("assignedBrokers")
+        .populate("addedByBroker"); 
+        
       if (!property) throw new Error("Property not found");
 
       if (context.user.role === "OWNER") {
@@ -90,10 +96,14 @@ export const resolvers = {
       }
       else if (context.user.role === "BROKER") {
         const currentBrokerId = getBrokerIdFromCookie(context);
+        
         const isAssigned = property.assignedBrokers.some(b => 
           (b._id ? b._id.toString() : b.toString()) === currentBrokerId.toString()
         );
-        const isCreator = property.addedByBroker?.toString() === currentBrokerId.toString();
+        
+        const isCreator = property.addedByBroker && (
+          (property.addedByBroker._id ? property.addedByBroker._id.toString() : property.addedByBroker.toString()) === currentBrokerId.toString()
+        );
 
         if (!isAssigned && !isCreator) {
            throw new Error("Unauthorized: You can only view details of properties assigned to you or created by you.");
@@ -106,7 +116,11 @@ export const resolvers = {
       const broker = await Broker.findById(context.user.id);
       if (!broker) throw new Error("Broker not found.");
       if (!broker.isVerified) throw new Error("Your account is pending admin verification.");
-      const properties = await Property.find({ assignedBrokers: broker._id }).populate("ownedby");
+      
+      const properties = await Property.find({ assignedBrokers: broker._id })
+        .populate("ownedby")
+        .populate("addedByBroker"); 
+        
       const isPremium = broker.planType === 'PREMIUM' && (!broker.planExpiryDate || new Date(broker.planExpiryDate) > new Date());
       if (!isPremium) return properties.map(prop => prop.toFreeTierJSON());
       return properties; 
@@ -145,6 +159,7 @@ export const resolvers = {
       context.res.clearCookie("AdminToken", { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", path: "/" });
       return "Admin logged out successfully";
     },
+    
     registerBroker: async (_, args) => {
       const existing = await Broker.findOne({ email: args.email });
       if (existing) throw new Error("Broker already exists");
@@ -179,12 +194,7 @@ export const resolvers = {
         throw new Error("Unauthorized: Only brokers can add clients.");
       }
       const brokerId = getBrokerIdFromCookie(context);
-      const updatedBroker = await Broker.findByIdAndUpdate(
-        brokerId,
-        { $push: { myclients: clientData } },
-        { new: true }
-      );
-      return updatedBroker;
+      return await Broker.findByIdAndUpdate(brokerId, { $push: { myclients: clientData } }, { new: true });
     },
     updateBrokerClientStatus: async (_, { clientId, status }, context) => {
       if (!context.user || context.user.role !== "BROKER") {
@@ -249,7 +259,6 @@ export const resolvers = {
       return "Owner deleted";
     },
     
-    // 🟢 UPDATED: CREATE PROPERTY (Strict separation of mapping vs creation)
     createProperty: async (_, args, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) {
         throw new Error("Unauthorized: Only Admins, Owners, and Brokers can create properties.");
@@ -265,19 +274,13 @@ export const resolvers = {
       } 
       else if (context.user.role === "BROKER") {
         const brokerId = getBrokerIdFromCookie(context);
-        // Mark that this broker created it, but do NOT push into assignedBrokers.
         args.addedByBroker = brokerId;
-      }
-      else if (context.user.role === "ADMIN" && !args.ownedby) {
-        // Optional: Keep admin requirement to assign an owner upon creation, or let them skip it too.
-        // Assuming we keep existing logic for admin.
       }
 
       const property = await new Property(args).save();
-      return await property.populate(["ownedby", "assignedBrokers"]);
+      return await property.populate(["ownedby", "assignedBrokers", "addedByBroker"]);
     },
 
-    // 🟢 UPDATED: UPDATE PROPERTY (Check both Assigned and Creator)
     updateProperty: async (_, { id, ...updates }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) {
         throw new Error("Unauthorized: Only Admins, Owners, and Brokers can update properties.");
@@ -305,11 +308,10 @@ export const resolvers = {
         delete updates.ownedby; 
       }
 
-      const property = await Property.findByIdAndUpdate(id, { $set: updates }, { new: true }).populate(["ownedby", "assignedBrokers"]);
+      const property = await Property.findByIdAndUpdate(id, { $set: updates }, { new: true }).populate(["ownedby", "assignedBrokers", "addedByBroker"]);
       return property;
     },
 
-    // 🟢 UPDATED: DELETE PROPERTY (Check both Assigned and Creator)
     deleteProperty: async (_, { id }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) {
         throw new Error("Unauthorized: Only Admins, Owners, and Brokers can delete properties.");

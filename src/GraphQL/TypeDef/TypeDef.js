@@ -1,13 +1,12 @@
 export const typeDefs = `#graphql
   type Admin { _id: ID! email: String! createdAt: String lastLoginAt: String }
   
-  # 🟢 Added Client type definition
   type Client { _id: ID name: String Propertyquery: String deadline: String status: Boolean assigneddate: String email: String phone: String remark: String }
   
-  # 🟢 Added myclients to Broker definition
   type Broker { _id: ID! name: String email: String phone: String profilepic: String rera: String pancard: String aadhar: String gst: String businessType: String businessregistration: String localtradelicense: String brokerageagreement: String isVerified: Boolean planType: String planExpiryDate: String createdAt: String lastLoginAt: String myclients: [Client] }
   
-  type PropertyOwner { _id: ID! name: String email: String phone: String address: String planType: String assignedBrokers: [Broker] planExpiryDate: String verifyStatus: Boolean pancard: String aadhar: String profilephoto: String createdAt: String lastLoginAt: String }
+  # 🟢 UPDATED: Included new Owner details (ownerType, companyName, contact persons)
+  type PropertyOwner { _id: ID! ownerType: String companyName: String name: String email: String phone: String address: String contactPersonName: String contactPersonPhone: String keyPersonName: String keyPersonPhone: String planType: String assignedBrokers: [Broker] planExpiryDate: String verifyStatus: Boolean pancard: String aadhar: String profilephoto: String createdAt: String lastLoginAt: String }
   
   type AdminAuthResponse { message: String!, admin: Admin, token: String }
   type BrokerAuthResponse { message: String!, broker: Broker, token: String }
@@ -16,12 +15,14 @@ export const typeDefs = `#graphql
   type PropertyAddress { houseno: String street: String city: String state: String pincode: String }
   type VisibilitySettings { showAddressToFreeBrokers: Boolean showOwnerDetailsToFreeBrokers: Boolean showReraToFreeBrokers: Boolean }
   
-  type Property { _id: ID! type: String name: String img: [String] address: PropertyAddress rera: String cc: Boolean mutation: Boolean furnished: Boolean carpetarea: String superbuilderarea: String landarea: String verified: Boolean noofbedrooms: String noofbathrooms: String noofhalls: String noofkitchens: String noofdrawingrooms: String noofbalcony: String noofparking: String description: String propertypapers:[String] amenities: [String] ownedby: PropertyOwner assignedBrokers: [Broker] visibilitySettings: VisibilitySettings createdAt: String updatedAt: String }
+  type BrokerOwnerDetails { ownerType: String companyName: String ownerName: String ownerPhone: String contactPersonName: String contactPersonPhone: String keyPersonName: String keyPersonPhone: String }
+  input BrokerOwnerDetailsInput { ownerType: String companyName: String ownerName: String ownerPhone: String contactPersonName: String contactPersonPhone: String keyPersonName: String keyPersonPhone: String }
+
+  type Property { _id: ID! type: String name: String img: [String] video: [String] price: String maintenanceCost: String rental: Boolean selling: Boolean address: PropertyAddress rera: String cc: Boolean mutation: Boolean furnished: Boolean carpetarea: String superbuilderarea: String landarea: String verified: Boolean noofbedrooms: String noofbathrooms: String noofhalls: String noofkitchens: String noofdrawingrooms: String noofbalcony: String noofparking: String description: String propertypapers:[String] amenities: [String] ownedby: PropertyOwner brokerOwnerDetails: BrokerOwnerDetails assignedBrokers: [Broker] addedByBroker: Broker visibilitySettings: VisibilitySettings createdAt: String updatedAt: String }
   
   input AddressInput { houseno: String! street: String! city: String! state: String! pincode: String! }
   input VisibilitySettingsInput { showAddressToFreeBrokers: Boolean showOwnerDetailsToFreeBrokers: Boolean showReraToFreeBrokers: Boolean }
   
-  # 🟢 Input type for creating a new broker client
   input ClientInput { name: String! Propertyquery: String! deadline: String email: String! phone: String! remark: String }
 
   type Query {
@@ -45,31 +46,29 @@ export const typeDefs = `#graphql
     registerBroker(name: String!, email: String!, phone: String!, password: String!, profilepic: String!): BrokerAuthResponse!
     loginBroker(email: String!, password: String!): BrokerAuthResponse!
     logoutBroker: String!
-    updateBroker(
-      id: ID!, name: String, email: String, phone: String, profilepic: String, rera: String, pancard: String, aadhar: String, gst: String, businessType: String, businessregistration: String, localtradelicense: String, brokerageagreement: String, isVerified: Boolean, planType: String, planExpiryDate: String
-    ): Broker!
+    updateBroker(id: ID!, name: String, email: String, phone: String, profilepic: String, rera: String, pancard: String, aadhar: String, gst: String, businessType: String, businessregistration: String, localtradelicense: String, brokerageagreement: String, isVerified: Boolean, planType: String, planExpiryDate: String): Broker!
     deleteBroker(id: ID!): String!
 
-    # 🟢 NEW: Broker Client Mutations
     addBrokerClient(clientData: ClientInput!): Broker!
     updateBrokerClientStatus(clientId: ID!, status: Boolean!): Broker!
     deleteBrokerClient(clientId: ID!): Broker!
-    registerOwner(name: String!, email: String!, phone: String!, address: String!, password: String!): OwnerAuthResponse!
+    
+    # 🟢 UPDATED: Owner mutations now accept the new schema fields
+    registerOwner(ownerType: String, companyName: String, name: String!, email: String!, phone: String!, address: String!, password: String!, contactPersonName: String, contactPersonPhone: String, keyPersonName: String, keyPersonPhone: String): OwnerAuthResponse!
     loginOwner(email: String!, password: String!): OwnerAuthResponse!
     logoutOwner: String!
-    updateMyOwnerProfile(
-      name: String, email: String, phone: String, address: String, pancard: String, aadhar: String, profilephoto: String
-    ): PropertyOwner!
     
-    updateOwner(id: ID!, name: String, email: String, phone: String, address: String, planType: String, planExpiryDate: String, assignedBrokers: [ID], verifyStatus: Boolean, pancard: String, aadhar: String, profilephoto: String): PropertyOwner!
+    updateMyOwnerProfile(ownerType: String, companyName: String, name: String, email: String, phone: String, address: String, contactPersonName: String, contactPersonPhone: String, keyPersonName: String, keyPersonPhone: String, pancard: String, aadhar: String, profilephoto: String): PropertyOwner!
+    
+    updateOwner(id: ID!, ownerType: String, companyName: String, name: String, email: String, phone: String, address: String, contactPersonName: String, contactPersonPhone: String, keyPersonName: String, keyPersonPhone: String, planType: String, planExpiryDate: String, assignedBrokers: [ID], verifyStatus: Boolean, pancard: String, aadhar: String, profilephoto: String): PropertyOwner!
     deleteOwner(id: ID!): String!
 
     createProperty(
-      type: String!, name: String!, img: [String]!, address: AddressInput!, rera: String!, cc: Boolean!, mutation: Boolean!, furnished: Boolean!, carpetarea: String!, superbuilderarea: String!, landarea: String!, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, description: String!, propertypapers:[String], amenities: [String]!, ownedby: ID, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput
+      type: String!, name: String!, img: [String]!, video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput!, rera: String!, cc: Boolean!, mutation: Boolean!, furnished: Boolean!, carpetarea: String!, superbuilderarea: String!, landarea: String!, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, description: String!, amenities: [String]!, ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput
     ): Property!
 
     updateProperty(
-      id: ID!, type: String, name: String, img: [String], address: AddressInput, rera: String, cc: Boolean, mutation: Boolean, furnished: Boolean, carpetarea: String, superbuilderarea: String, landarea: String, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, description: String, propertypapers:[String], amenities: [String], ownedby: ID, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput
+      id: ID!, type: String, name: String, img: [String], video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput, rera: String, cc: Boolean, mutation: Boolean, furnished: Boolean, carpetarea: String, superbuilderarea: String, landarea: String, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, description: String, amenities: [String], ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput
     ): Property!
     
     deleteProperty(id: ID!): String!

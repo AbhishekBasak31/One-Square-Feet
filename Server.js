@@ -18,6 +18,8 @@ import UploadRouter from "./src/Routers/Global/Upload.js";
 import Admin from "./src/Models/Global/User.js";
 import Broker from "./src/Models/Global/Broker.js";
 import PropertyOwner from "./src/Models/Global/Owner.js";
+import Propertypdf from "./src/Routers/Global/propertypdf.js";
+
 
 const app = express();
 const PORT = process.env.PORT || 7000; // ✅ RUNNING ON 7000
@@ -36,6 +38,8 @@ app.use(cors({
 // 1. UNIVERSAL UPLOAD ROUTE (REST)
 // ==========================================
 app.use("/api/v1/upload", UploadRouter);
+app.use("/api/v1/propertypdf", Propertypdf);
+
 
 // ==========================================
 // 2. GRAPHQL SERVER SETUP
