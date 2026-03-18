@@ -1,11 +1,11 @@
 import express from 'express';
 import puppeteer from 'puppeteer';
 import axios from 'axios';
-import Property from '../../Models/Global/Property.js'; // Ensure this path is correct for your project structure
+import Property from '../../Models/Global/Property.js'; // Adjust this path if your folder structure is different
 
-const Propertypdf = express.Router();
+const router = express.Router();
 
-Propertypdf.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res) => {
   console.log(`\n✅ PDF Route successfully hit for Property ID: ${req.params.id}`);
   
   try {
@@ -21,7 +21,6 @@ Propertypdf.get('/:id', async (req, res) => {
     console.log("🖼️ Fetching Images and converting to Base64...");
     
     // 2. Fetch up to 6 images concurrently and convert to Base64
-    // (We limit to 6 so the PDF doesn't become too massive/slow)
     const imageUrls = property.img ? property.img.slice(0, 6) : [];
     
     const base64Images = await Promise.all(
@@ -47,7 +46,7 @@ Propertypdf.get('/:id', async (req, res) => {
     const contactName = property.addedByBroker?.name || property.ownedby?.name || property.brokerOwnerDetails?.ownerName || 'Authorized Broker';
     const contactPhone = property.addedByBroker?.phone || property.ownedby?.phone || property.brokerOwnerDetails?.ownerPhone || 'Reply to this WhatsApp message';
 
-    // 4. Build the HTML Template with ALL Details
+    // 4. Build the HTML Template
     const htmlTemplate = `
       <!DOCTYPE html>
       <html lang="en">
@@ -163,8 +162,8 @@ Propertypdf.get('/:id', async (req, res) => {
     
     const page = await browser.newPage();
     
-    // 6. Set HTML Content (networkidle2 allows basic background connections to finish without timing out)
-    await page.setContent(htmlTemplate, { waitUntil: 'networkidle2', timeout: 60000 });
+    // 6. 🟢 Set HTML Content (domcontentloaded guarantees it won't timeout waiting for network requests!)
+    await page.setContent(htmlTemplate, { waitUntil: 'domcontentloaded', timeout: 60000 });
     
     console.log("🖨️ Printing to PDF...");
     const pdfBuffer = await page.pdf({ 
@@ -179,13 +178,9 @@ Propertypdf.get('/:id', async (req, res) => {
     // 7. Safely convert to Buffer and Send
     const binaryPdf = Buffer.from(pdfBuffer);
 
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Length': binaryPdf.length,
-      'Content-Disposition': `inline; filename="${property.name.replace(/\s+/g, '_')}_Brochure.pdf"`
-    });
-
-    res.end(binaryPdf);
+    res.contentType("application/pdf");
+    res.setHeader('Content-Disposition', `inline; filename="${property.name.replace(/\s+/g, '_')}_Brochure.pdf"`);
+    res.send(binaryPdf);
 
   } catch (error) {
     console.error("🔥 PDF Generation Error:", error);
@@ -202,4 +197,4 @@ Propertypdf.get('/:id', async (req, res) => {
   }
 });
 
-export default Propertypdf;
+export default router;
