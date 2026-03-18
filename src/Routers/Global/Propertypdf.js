@@ -3,16 +3,15 @@ import puppeteer from 'puppeteer';
 import axios from 'axios';
 import Property from '../../Models/Global/Property.js'; 
 
-const Propertypdf = express.Router();
+const router = express.Router();
 
-Propertypdf.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res) => {
   console.log(`\n✅ PDF Route successfully hit for Property ID: ${req.params.id}`);
   
   try {
-    // 1. Fetch Property with ALL related user data
     const property = await Property.findById(req.params.id)
       .populate('ownedby')
-      .populate('addedByBroker'); // In case a broker created it
+      .populate('addedByBroker'); 
 
     if (!property) {
       return res.status(404).send('Property not found');
@@ -20,8 +19,6 @@ Propertypdf.get('/:id', async (req, res) => {
 
     console.log("🖼️ Fetching Images and converting to Base64...");
     
-    // 2. Fetch up to 6 images concurrently and convert to Base64
-    // (We limit to 6 so the PDF doesn't become too massive/slow)
     const imageUrls = property.img ? property.img.slice(0, 6) : [];
     
     const base64Images = await Promise.all(
@@ -38,16 +35,13 @@ Propertypdf.get('/:id', async (req, res) => {
       })
     );
 
-    // Filter out any images that failed to load
     const validImages = base64Images.filter(img => img !== null);
 
     console.log("📄 Generating HTML Template...");
     
-    // 3. Determine Contact Person
     const contactName = property.addedByBroker?.name || property.ownedby?.name || property.brokerOwnerDetails?.ownerName || 'Authorized Broker';
     const contactPhone = property.addedByBroker?.phone || property.ownedby?.phone || property.brokerOwnerDetails?.ownerPhone || 'Reply to this WhatsApp message';
 
-    // 4. Build the HTML Template with ALL Details
     const htmlTemplate = `
       <!DOCTYPE html>
       <html lang="en">
@@ -60,10 +54,8 @@ Propertypdf.get('/:id', async (req, res) => {
           h3 { color: #64748b; margin: 8px 0 0 0; font-weight: normal; font-size: 16px; }
           .badge { background-color: #FACC15; color: #0F172A; padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; display: inline-block; margin-top: 15px; }
           
-          /* Dynamic Image Gallery Grid */
           .image-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 30px; }
           .image-grid img { width: 100%; height: 200px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0; }
-          /* Make the first image span full width if it's the only one, or if there are 3 images */
           .image-grid img:first-child:nth-last-child(1) { grid-column: span 2; height: 350px; }
           .image-grid img:first-child:nth-last-child(3) { grid-column: span 2; height: 300px; }
           
@@ -150,7 +142,7 @@ Propertypdf.get('/:id', async (req, res) => {
     
     const browser = await puppeteer.launch({ 
       headless: true, 
-      channel: 'chrome', 
+      // 🟢 Fix for Render: Removed "channel: 'chrome'" so it uses the built-in Chromium
       args: [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
@@ -162,7 +154,6 @@ Propertypdf.get('/:id', async (req, res) => {
     
     const page = await browser.newPage();
     
-    // Set a higher timeout (60s) just in case downloading 6 images takes a few extra seconds
     await page.setContent(htmlTemplate, { waitUntil: 'networkidle2', timeout: 60000 });
     
     console.log("🖨️ Printing to PDF...");
@@ -198,4 +189,4 @@ Propertypdf.get('/:id', async (req, res) => {
   }
 });
 
-export default Propertypdf;
+export default router;
