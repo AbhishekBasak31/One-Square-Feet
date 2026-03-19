@@ -1,5 +1,6 @@
 import express from 'express';
 import puppeteer from 'puppeteer';
+import axios from 'axios';
 import Property from '../../Models/Global/Property.js'; 
 import Broker from '../../Models/Global/Broker.js'; // 🔴 Ensure this import path is accurate!
 
@@ -10,12 +11,12 @@ router.get('/:id', async (req, res) => {
   console.log(`✅ PDF Route Hit for Property: ${req.params.id}`);
   console.log(`🌐 Full Incoming Request URL: ${req.originalUrl}`);
   
+  let browser; // Declared outside so the 'finally' block can always close it
+
   try {
     const { brokerId } = req.query; 
     let isPremium = false;
     let sharingBroker = null;
-
-    console.log(`🔑 Extracted Broker ID from Query: ${brokerId || 'UNDEFINED / MISSING'}`);
 
     // 1. Verify the Broker's Subscription Plan
     if (brokerId) {
@@ -33,8 +34,9 @@ router.get('/:id', async (req, res) => {
         }
       } catch (err) {
         console.error("🔥 FATAL DB ERROR: Could not load Broker model. Check your import path!");
-        console.error(err.message);
       }
+    } else {
+        console.log("⚠️ No brokerId provided in URL. Defaulting to Free Tier view.");
     }
 
     // 2. Fetch Property
@@ -44,19 +46,40 @@ router.get('/:id', async (req, res) => {
 
     if (!property) return res.status(404).send('Property not found');
 
-    // 3. Process Native Images (Network idle required for native images)
+    console.log("🖼️ Fetching Images and converting to Base64...");
+    
+    // 3. Process Images with Bot-Bypassing Headers (Max 4 for performance)
     const imageUrls = property.img ? property.img.slice(0, 4) : [];
-    let imageGridHtml = '';
+    
+    const base64Images = await Promise.all(
+      imageUrls.map(async (imgUrl) => {
+        try {
+          const imageResponse = await axios.get(imgUrl, { 
+            responseType: 'arraybuffer',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+              'Accept': 'image/jpeg, image/png, image/webp, image/*'
+            },
+            timeout: 15000 
+          });
 
-    if (imageUrls.length > 0) {
-      imageGridHtml = `
-        <div class="image-grid">
-          ${imageUrls.map(url => `<img src="${url}" loading="eager" crossorigin="anonymous" />`).join('')}
-        </div>
-      `;
-    }
+          const contentType = imageResponse.headers['content-type'] || '';
+          if (!contentType.startsWith('image/')) {
+            console.error(`⚠️ URL returned HTML instead of an image: ${contentType}`);
+            return null;
+          }
 
-    console.log("📄 Generating HTML Template...");
+          const imageBase64 = Buffer.from(imageResponse.data, 'binary').toString('base64');
+          return `data:${contentType};base64,${imageBase64}`;
+        } catch (imgError) {
+          console.error(`⚠️ Failed to load image:`, imgError.message);
+          return null; 
+        }
+      })
+    );
+
+    const validImages = base64Images.filter(img => img !== null);
+    console.log(`✅ Successfully loaded ${validImages.length} images.`);
     
     const contactName = sharingBroker?.name || property.addedByBroker?.name || 'Authorized Broker';
     const contactPhone = sharingBroker?.phone || property.addedByBroker?.phone || 'Reply to this WhatsApp message';
@@ -115,7 +138,11 @@ router.get('/:id', async (req, res) => {
           </div>
         ` : ''}
 
-        ${imageGridHtml}
+        ${validImages.length > 0 ? `
+          <div class="image-grid">
+            ${validImages.map(src => `<img src="${src}" />`).join('')}
+          </div>
+        ` : ''}
 
         <div class="specs-container">
           <div style="flex: 1;">
@@ -188,23 +215,36 @@ router.get('/:id', async (req, res) => {
     `;
 
     console.log("🚀 Launching Puppeteer...");
+
+    // 🟢 SMART OS DETECTION
+    const isWindows = process.platform === 'win32';
     
-    const browser = await puppeteer.launch({ 
+    // Base arguments for both environments
+    const puppeteerArgs = [
+      '--no-sandbox', 
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-features=IsolateOrigins,site-per-process'
+    ];
+
+    // Add Render-specific Linux arguments to prevent 30s timeouts
+    if (!isWindows) {
+      puppeteerArgs.push('--single-process');
+      puppeteerArgs.push('--no-zygote');
+    }
+    
+    browser = await puppeteer.launch({ 
       headless: true, 
-      args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--single-process',
-        '--no-zygote'
-      ] 
+      // Protects Windows from EBUSY crashes, uses safe tmp folder on Linux
+      userDataDir: isWindows ? './.cache/puppeteer_user_data' : '/tmp/puppeteer_user_data', 
+      args: puppeteerArgs 
     });
     
     const page = await browser.newPage();
     
-    // 🟢 networkidle0 is crucial here since we are using native image URLs now
-    await page.setContent(htmlTemplate, { waitUntil: 'networkidle0', timeout: 60000 });
+    // domcontentloaded ensures it prints instantly since images are converted to Base64
+    await page.setContent(htmlTemplate, { waitUntil: 'domcontentloaded', timeout: 60000 });
     
     console.log("🖨️ Printing to PDF...");
     const pdfBuffer = await page.pdf({ 
@@ -213,7 +253,6 @@ router.get('/:id', async (req, res) => {
       margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
     });
     
-    await browser.close();
     console.log("✅ PDF successfully generated!");
 
     res.contentType("application/pdf");
@@ -227,8 +266,15 @@ router.get('/:id', async (req, res) => {
       <div style="font-family: sans-serif; text-align: center; padding: 50px; color: red;">
         <h2>Oops! Failed to generate PDF.</h2>
         <p>Error: ${error.message}</p>
+        <p>Check the backend terminal logs for more details.</p>
       </div>
     `);
+  } finally {
+    // 🟢 GUARANTEES the browser closes and memory is freed, even if it crashes halfway!
+    if (browser) {
+      await browser.close();
+      console.log("🧹 Browser closed and memory released.");
+    }
   }
 });
 
