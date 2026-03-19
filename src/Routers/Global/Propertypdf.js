@@ -1,11 +1,8 @@
 import express from 'express';
 import puppeteer from 'puppeteer';
+import axios from 'axios';
 import Property from '../../Models/Global/Property.js'; 
-import Broker from '../../Models/Global/Broker.js';
-
-// 🔴 CRITICAL: Make sure this path exactly matches where your Broker model is!
-// If this path is wrong, it will ALWAYS show the restricted Free Tier view.
-
+import Broker from '../../Models/Global/Broker.js'; 
 
 const router = express.Router();
 
@@ -30,8 +27,7 @@ router.get('/:id', async (req, res) => {
           console.log(`🔒 Broker verified, but plan is Free/Restricted.`);
         }
       } catch (err) {
-        console.error("🔥 FATAL DB ERROR: Could not load Broker model. Check your import path at the top of the file!");
-        console.error(err.message);
+        console.error("🔥 DB ERROR: Could not load Broker. Check your import path!");
       }
     }
 
@@ -42,23 +38,46 @@ router.get('/:id', async (req, res) => {
 
     if (!property) return res.status(404).send('Property not found');
 
-    // 3. Use Native Image URLs (Max 4 to keep PDF size clean)
-    const imageUrls = property.img ? property.img.slice(0, 4) : [];
-    let imageGridHtml = '';
+    console.log("🖼️ Fetching Images and converting to Base64...");
+    
+    // 3. Process Images (Max 6) with strict bot-bypassing headers
+    const imageUrls = property.img ? property.img.slice(0, 6) : [];
+    
+    const base64Images = await Promise.all(
+      imageUrls.map(async (imgUrl) => {
+        try {
+          const imageResponse = await axios.get(imgUrl, { 
+            responseType: 'arraybuffer',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+              'Accept': 'image/jpeg, image/png, image/webp, image/*'
+            },
+            timeout: 15000 
+          });
 
-    if (imageUrls.length > 0) {
-      imageGridHtml = `
-        <div class="image-grid">
-          ${imageUrls.map(url => `<img src="${url}" crossorigin="anonymous" />`).join('')}
-        </div>
-      `;
-    }
+          const contentType = imageResponse.headers['content-type'] || '';
+          if (!contentType.startsWith('image/')) {
+            console.error(`⚠️ URL returned HTML instead of an image: ${contentType}`);
+            return null;
+          }
 
+          const imageBase64 = Buffer.from(imageResponse.data, 'binary').toString('base64');
+          return `data:${contentType};base64,${imageBase64}`;
+        } catch (imgError) {
+          console.error(`⚠️ Failed to load image:`, imgError.message);
+          return null; 
+        }
+      })
+    );
+
+    const validImages = base64Images.filter(img => img !== null);
+    console.log(`✅ Successfully loaded ${validImages.length} images.`);
     console.log("📄 Generating HTML Template...");
     
     const contactName = sharingBroker?.name || property.addedByBroker?.name || 'Authorized Broker';
     const contactPhone = sharingBroker?.phone || property.addedByBroker?.phone || 'Reply to this WhatsApp message';
 
+    // 4. Build Dynamic HTML
     const htmlTemplate = `
       <!DOCTYPE html>
       <html lang="en">
@@ -112,7 +131,11 @@ router.get('/:id', async (req, res) => {
           </div>
         ` : ''}
 
-        ${imageGridHtml}
+        ${validImages.length > 0 ? `
+          <div class="image-grid">
+            ${validImages.map(src => `<img src="${src}" />`).join('')}
+          </div>
+        ` : ''}
 
         <div class="specs-container">
           <div style="flex: 1;">
@@ -200,8 +223,8 @@ router.get('/:id', async (req, res) => {
     
     const page = await browser.newPage();
     
-    // 🟢 CRITICAL FIX: networkidle0 tells Puppeteer to wait until ALL images naturally load over the network!
-    await page.setContent(htmlTemplate, { waitUntil: 'networkidle0', timeout: 60000 });
+    // domcontentloaded ensures it prints instantly since images are Base64
+    await page.setContent(htmlTemplate, { waitUntil: 'domcontentloaded', timeout: 60000 });
     
     console.log("🖨️ Printing to PDF...");
     const pdfBuffer = await page.pdf({ 
