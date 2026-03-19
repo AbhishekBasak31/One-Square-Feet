@@ -1,8 +1,11 @@
 import express from 'express';
 import puppeteer from 'puppeteer';
-import axios from 'axios';
 import Property from '../../Models/Global/Property.js'; 
-import Broker from '../../Models/Global/Broker.js'; // 🟢 Added Broker Model to verify the plan
+import Broker from '../../Models/Global/Broker.js';
+
+// 🔴 CRITICAL: Make sure this path exactly matches where your Broker model is!
+// If this path is wrong, it will ALWAYS show the restricted Free Tier view.
+
 
 const router = express.Router();
 
@@ -10,22 +13,25 @@ router.get('/:id', async (req, res) => {
   console.log(`\n✅ PDF Route successfully hit for Property ID: ${req.params.id}`);
   
   try {
-    const { brokerId } = req.query; // 🟢 Extract the Broker ID from the WhatsApp link URL
+    const { brokerId } = req.query; 
     let isPremium = false;
     let sharingBroker = null;
 
     // 1. Verify the Broker's Subscription Plan
     if (brokerId) {
       try {
+        console.log(`🔍 Checking Database for Broker ID: ${brokerId}`);
         sharingBroker = await Broker.findById(brokerId);
+        
         if (sharingBroker && sharingBroker.planType === 'PREMIUM') {
           isPremium = true;
-          console.log(`🔓 Premium Broker (${sharingBroker.name}) detected. Unlocking all PDF data.`);
+          console.log(`🔓 Premium Broker (${sharingBroker.name}) verified. Unlocking PDF.`);
         } else {
-          console.log(`🔒 Free Tier Broker detected. Restricting PDF data.`);
+          console.log(`🔒 Broker verified, but plan is Free/Restricted.`);
         }
       } catch (err) {
-        console.error("⚠️ Could not verify broker plan, defaulting to Free tier.");
+        console.error("🔥 FATAL DB ERROR: Could not load Broker model. Check your import path at the top of the file!");
+        console.error(err.message);
       }
     }
 
@@ -34,46 +40,25 @@ router.get('/:id', async (req, res) => {
       .populate('ownedby')
       .populate('addedByBroker'); 
 
-    if (!property) {
-      return res.status(404).send('Property not found');
+    if (!property) return res.status(404).send('Property not found');
+
+    // 3. Use Native Image URLs (Max 4 to keep PDF size clean)
+    const imageUrls = property.img ? property.img.slice(0, 4) : [];
+    let imageGridHtml = '';
+
+    if (imageUrls.length > 0) {
+      imageGridHtml = `
+        <div class="image-grid">
+          ${imageUrls.map(url => `<img src="${url}" crossorigin="anonymous" />`).join('')}
+        </div>
+      `;
     }
-
-    console.log("🖼️ Fetching Images and converting to Base64...");
-    
-    // 3. Process Images
-    const imageUrls = property.img ? property.img.slice(0, 6) : [];
-    const base64Images = await Promise.all(
-      imageUrls.map(async (imgUrl) => {
-        try {
-          const imageResponse = await axios.get(imgUrl, { 
-            responseType: 'arraybuffer',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-              'Accept': 'image/jpeg, image/png, image/webp, image/*'
-            },
-            timeout: 15000 
-          });
-
-          const contentType = imageResponse.headers['content-type'] || '';
-          if (!contentType.startsWith('image/')) return null;
-
-          const imageBase64 = Buffer.from(imageResponse.data, 'binary').toString('base64');
-          return `data:${contentType};base64,${imageBase64}`;
-        } catch (imgError) {
-          return null; 
-        }
-      })
-    );
-
-    const validImages = base64Images.filter(img => img !== null);
 
     console.log("📄 Generating HTML Template...");
     
-    // 4. Contact box should point to the Broker who sent the WhatsApp message!
     const contactName = sharingBroker?.name || property.addedByBroker?.name || 'Authorized Broker';
     const contactPhone = sharingBroker?.phone || property.addedByBroker?.phone || 'Reply to this WhatsApp message';
 
-    // 5. Build Dynamic HTML
     const htmlTemplate = `
       <!DOCTYPE html>
       <html lang="en">
@@ -127,11 +112,7 @@ router.get('/:id', async (req, res) => {
           </div>
         ` : ''}
 
-        ${validImages.length > 0 ? `
-          <div class="image-grid">
-            ${validImages.map(src => `<img src="${src}" />`).join('')}
-          </div>
-        ` : ''}
+        ${imageGridHtml}
 
         <div class="specs-container">
           <div style="flex: 1;">
@@ -140,7 +121,6 @@ router.get('/:id', async (req, res) => {
               <tr><th>Asking Price/Rent</th><td>${property.price ? `₹ ${property.price}` : 'N/A'}</td></tr>
               <tr><th>Maintenance</th><td>${property.maintenanceCost || 'N/A'}</td></tr>
               <tr><th>Carpet Area</th><td>${property.carpetarea ? `${property.carpetarea}` : '-'}</td></tr>
-              
               ${isPremium ? `
                 <tr><th>Super Built-up</th><td>${property.superbuilderarea || '-'}</td></tr>
                 <tr><th>Land Area</th><td>${property.landarea || '-'}</td></tr>
@@ -154,7 +134,6 @@ router.get('/:id', async (req, res) => {
               <tr><th>Bedrooms</th><td>${property.noofbedrooms || '-'}</td></tr>
               <tr><th>Bathrooms</th><td>${property.noofbathrooms || '-'}</td></tr>
               <tr><th>Furnished</th><td>${property.furnished ? 'Yes' : 'No'}</td></tr>
-              
               ${isPremium ? `
                 <tr><th>Halls / Living</th><td>${property.noofhalls || '-'}</td></tr>
                 <tr><th>Kitchens</th><td>${property.noofkitchens || '-'}</td></tr>
@@ -221,7 +200,8 @@ router.get('/:id', async (req, res) => {
     
     const page = await browser.newPage();
     
-    await page.setContent(htmlTemplate, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    // 🟢 CRITICAL FIX: networkidle0 tells Puppeteer to wait until ALL images naturally load over the network!
+    await page.setContent(htmlTemplate, { waitUntil: 'networkidle0', timeout: 60000 });
     
     console.log("🖨️ Printing to PDF...");
     const pdfBuffer = await page.pdf({ 
@@ -233,11 +213,9 @@ router.get('/:id', async (req, res) => {
     await browser.close();
     console.log("✅ PDF successfully generated!");
 
-    const binaryPdf = Buffer.from(pdfBuffer);
-
     res.contentType("application/pdf");
     res.setHeader('Content-Disposition', `inline; filename="${property.name.replace(/\s+/g, '_')}_Brochure.pdf"`);
-    res.send(binaryPdf);
+    res.send(Buffer.from(pdfBuffer));
 
   } catch (error) {
     console.error("🔥 PDF Generation Error:", error);
@@ -246,7 +224,6 @@ router.get('/:id', async (req, res) => {
       <div style="font-family: sans-serif; text-align: center; padding: 50px; color: red;">
         <h2>Oops! Failed to generate PDF.</h2>
         <p>Error: ${error.message}</p>
-        <p>Please check your backend terminal for the full error log.</p>
       </div>
     `);
   }
