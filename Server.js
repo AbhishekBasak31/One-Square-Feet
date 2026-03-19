@@ -19,6 +19,8 @@ import Admin from "./src/Models/Global/User.js";
 import Broker from "./src/Models/Global/Broker.js";
 import PropertyOwner from "./src/Models/Global/Owner.js";
 import Propertypdf from "./src/Routers/Global/Propertypdf.js";
+import WhatsappRouter from "./src/Routers/Global/Whatsapp.js";
+
 
 
 
@@ -40,6 +42,8 @@ app.use(cors({
 // ==========================================
 app.use("/api/v1/upload", UploadRouter);
 app.use("/api/v1/propertypdf", Propertypdf);
+app.use("/api/v1/whatsapp", WhatsappRouter);
+
 
 
 // ==========================================
