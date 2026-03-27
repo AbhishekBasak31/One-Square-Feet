@@ -22,7 +22,8 @@ import Propertypdf from "./src/Routers/Global/Propertypdf.js";
 import WhatsappRouter from "./src/Routers/Global/Whatsapp.js";
 
 
-
+import TaxInvoiceRouter from "./src/Routers/Global/TaxInvoice.js";
+import LedgerRouter from "./src/Routers/Global/Ledger.js";
 
 const app = express();
 const PORT = process.env.PORT || 7000; // ✅ RUNNING ON 7000
@@ -44,6 +45,8 @@ app.use("/api/v1/upload", UploadRouter);
 app.use("/api/v1/propertypdf", Propertypdf);
 app.use("/api/v1/whatsapp", WhatsappRouter);
 
+app.use("/api/v1/taxinvoice", TaxInvoiceRouter);
+app.use("/api/v1/ledger", LedgerRouter);
 
 
 // ==========================================

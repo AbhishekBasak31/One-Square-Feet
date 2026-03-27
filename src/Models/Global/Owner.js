@@ -40,6 +40,12 @@ const OwnerSchema = new SCHEMA(
     profilephoto:{
         type: String, 
     },
+    bankDetails: {
+    accountName: { type: String, default: "" },
+    accountNumber: { type: String, default: "" },
+    ifscCode: { type: String, default: "" },
+    bankName: { type: String, default: "" }
+  },
     // Admin selects which brokers this owner is allowed to see
     assignedBrokers: [{
         type: mongoose.Schema.Types.ObjectId,

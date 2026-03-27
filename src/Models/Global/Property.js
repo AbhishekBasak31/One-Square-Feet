@@ -50,7 +50,14 @@ const PropertySchema = new SCHEMA(
     maintenanceCost: { type: String }, 
     rental: { type: Boolean, default: false },
     selling: { type: Boolean, default: false },
-
+    propertyAge: { type: String }, // 🟢 NEW: Age of property in years
+    
+    // 🟢 Connects to the currently active lease contract
+    activeLease: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "Lease", 
+        default: null 
+    },
     // ==========================================
     // 🟢 OWNER TRACKING
     // ==========================================
@@ -83,7 +90,7 @@ const PropertySchema = new SCHEMA(
         type: mongoose.Schema.Types.ObjectId,
         ref: "Broker"
     },
-
+    
     propertypapers: [{type:String}],
     visibilitySettings: {
         showAddressToFreeBrokers: { type: Boolean, default: false },

@@ -34,7 +34,12 @@ const BrokerSchema = new SCHEMA(
         type: String, 
         enum: ['Proprietorship', 'Partnership', 'LLP', 'Private Limited Company', 'Freelance'],
     },
-    
+    bankDetails: {
+    accountName: { type: String, default: "" },
+    accountNumber: { type: String, default: "" },
+    ifscCode: { type: String, default: "" },
+    bankName: { type: String, default: "" }
+  },
     businessregistration: { type: String },
     localtradelicense: { type: String },
     
