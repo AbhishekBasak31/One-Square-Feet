@@ -9,11 +9,14 @@ const PaymentSchema = new SCHEMA({
   amount: { type: Number, required: true },
   paymentDate: { type: Date, default: Date.now },
   
-  // Method can be manual or via Razorpay
   paymentMethod: { type: String, enum: ["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "RAZORPAY"], required: true },
   
-  // To store Razorpay payment ID or Bank UTR number
-  transactionId: { type: String }, 
+  // 🟢 DEDICATED FIELDS FOR EACH PAYMENT TYPE
+  transactionId: { type: String },      // For UPI, Bank Transfer, or Razorpay
+  chequeNumber: { type: String },       // For Cheque
+  chequeDepositDate: { type: Date },    // For Cheque
+  cashDepositDate: { type: Date },      // For Cash (Handover Date)
+
   notes: { type: String }
 }, { timestamps: true });
 

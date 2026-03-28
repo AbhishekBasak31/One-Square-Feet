@@ -24,7 +24,15 @@ const BrokerSchema = new SCHEMA(
     rera: { type: String }, 
     pancard: { type: String }, 
     aadhar: { type: String }, 
-    
+    panno:{
+    type: String, 
+    },
+    aadharno:{
+    type: String, 
+    },
+    digitalSignature:{
+  type: String, 
+    },
     // ==========================================
     // 3. ADMIN VERIFIED BUSINESS DOCUMENTS (Optional at Signup)
     // ==========================================

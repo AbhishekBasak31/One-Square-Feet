@@ -1,12 +1,20 @@
 import jwt from "jsonwebtoken";
+
+// Core Models
 import Broker from "../../Models/Global/Broker.js";
 import PropertyOwner from "../../Models/Global/Owner.js";
 import Property from "../../Models/Global/Property.js";
 import Admin from "../../Models/Global/User.js";
+
+// Financial & Leasing Models
 import Tenant from "../../Models/Global/Tenants.js";
 import Lease from "../../Models/Global/Lease.js";
 import Invoice from "../../Models/Global/Invoice.js";
 import Payment from "../../Models/Global/Payment.js";
+
+// 🟢 NEW: Import Email Utilities (Ensure you created these files!)
+import { generateEmailTemplate } from "../../Utils/emailTemplates.js";
+import { sendDynamicEmail } from "../../Utils/mailer.js";
 
 const getOwnerIdFromCookie = (context) => {
   const token = context.req?.cookies?.OwnerToken;
@@ -36,6 +44,7 @@ export const resolvers = {
     getOwners: async (_, __, context) => { if (!context.user || context.user.role !== "ADMIN") throw new Error("Unauthorized"); return await PropertyOwner.find().sort({ createdAt: -1 }).populate("assignedBrokers"); },
     getMyOwnerProfile: async (_, __, context) => { if (!context.user || context.user.role !== "OWNER") throw new Error("Unauthorized"); return await PropertyOwner.findById(context.user.id); },
     getOwnerById: async (_, { id }, context) => { if (!context.user || context.user.role !== "ADMIN") throw new Error("Unauthorized"); return await PropertyOwner.findById(id).populate("assignedBrokers"); },
+    
     getProperties: async (_, __, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
       let filter = {};
@@ -70,7 +79,10 @@ export const resolvers = {
 
     getLeases: async (_, __, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
-      return await Lease.find({ status: "ACTIVE" }).sort({ createdAt: -1 }).populate("tenant").populate("property");
+      let filter = {}; 
+      if (context.user.role === "OWNER") filter.ownedby = getOwnerIdFromCookie(context);
+      else if (context.user.role === "BROKER") filter.addedByBroker = getBrokerIdFromCookie(context);
+      return await Lease.find(filter).sort({ createdAt: -1 }).populate("tenant").populate("property");
     },
     getLeaseById: async (_, { id }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
@@ -78,8 +90,12 @@ export const resolvers = {
     },
     getTenants: async (_, __, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
-      return await Tenant.find().sort({ createdAt: -1 });
+      let filter = {};
+      if (context.user.role === "OWNER") filter.ownedby = getOwnerIdFromCookie(context);
+      else if (context.user.role === "BROKER") filter.addedByBroker = getBrokerIdFromCookie(context);
+      return await Tenant.find(filter).sort({ createdAt: -1 });
     },
+
     getInvoicesByTenant: async (_, { tenantId }, context) => {
       if (!context.user) throw new Error("Unauthorized");
       return await Invoice.find({ tenant: tenantId }).sort({ invoiceDate: -1 });
@@ -89,18 +105,24 @@ export const resolvers = {
       return await Payment.find({ invoice: invoiceId }).sort({ paymentDate: -1 });
     },
     getMyInvoices: async (_, __, context) => {
-      if (!context.user || context.user.role !== "OWNER") throw new Error("Unauthorized");
+      if (!context.user) throw new Error("Unauthorized");
+      let propertyIds = [];
       
-      // 1. Find all properties owned by this user
-      const properties = await Property.find({ ownedby: context.user.id });
-      const propertyIds = properties.map(p => p._id);
-      
-      // 2. Fetch all invoices linked to those properties
-      return await Invoice.find({ property: { $in: propertyIds } })
-        .sort({ invoiceDate: -1 })
-        .populate('tenant')
-        .populate('property');
-    },
+      if (context.user.role === "OWNER") {
+        const ownerId = getOwnerIdFromCookie(context);
+        const properties = await Property.find({ ownedby: ownerId });
+        propertyIds = properties.map(p => p._id);
+      } else if (context.user.role === "BROKER") {
+        const brokerId = getBrokerIdFromCookie(context);
+        const properties = await Property.find({ assignedBrokers: brokerId });
+        propertyIds = properties.map(p => p._id);
+      } else if (context.user.role === "ADMIN") {
+        const properties = await Property.find();
+        propertyIds = properties.map(p => p._id);
+      }
+
+      return await Invoice.find({ property: { $in: propertyIds } }).populate('tenant').populate('property').sort({ invoiceDate: -1 });
+    }
   },
 
   Mutation: {
@@ -111,6 +133,7 @@ export const resolvers = {
     registerBroker: async (_, args) => { const existing = await Broker.findOne({ email: args.email }); if (existing) throw new Error("Broker already exists"); const broker = await new Broker(args).save(); return { message: "Broker registered successfully.", broker }; },
     loginBroker: async (_, { email, password }, context) => { const broker = await Broker.findOne({ email }); if (!broker || !(await broker.comparePassword(password))) throw new Error("Invalid credentials"); const token = broker.generateAccessToken(); broker.lastLoginAt = new Date(); await broker.save(); const isProd = process.env.NODE_ENV === "production"; context.res.cookie("BrokerToken", token, { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", path: "/", maxAge: 24 * 60 * 60 * 1000 }); return { message: "Broker login successful", broker, token }; },
     logoutBroker: async (_, __, context) => { const isProd = process.env.NODE_ENV === "production"; context.res.clearCookie("BrokerToken", { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", path: "/" }); return "Broker logged out successfully"; },
+    
     updateBroker: async (_, { id, ...updates }) => await Broker.findByIdAndUpdate(id, { $set: updates }, { new: true }),
     deleteBroker: async (_, { id }) => { await Broker.findByIdAndDelete(id); await Property.updateMany({ assignedBrokers: id }, { $pull: { assignedBrokers: id } }); await PropertyOwner.updateMany({ assignedBrokers: id }, { $pull: { assignedBrokers: id } }); return "Broker deleted"; },
     
@@ -121,6 +144,7 @@ export const resolvers = {
     registerOwner: async (_, args) => { const existing = await PropertyOwner.findOne({ email: args.email }); if (existing) throw new Error("Owner already exists"); const owner = await new PropertyOwner(args).save(); return { message: "Owner registered successfully", owner }; },
     loginOwner: async (_, { email, password }, context) => { const owner = await PropertyOwner.findOne({ email }); if (!owner || !(await owner.comparePassword(password))) throw new Error("Invalid credentials"); const token = owner.generateAccessToken(); owner.lastLoginAt = new Date(); await owner.save(); const isProd = process.env.NODE_ENV === "production"; context.res.cookie("OwnerToken", token, { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", path: "/", maxAge: 24 * 60 * 60 * 1000 }); return { message: "Owner login successful", owner, token }; },
     logoutOwner: async (_, __, context) => { const isProd = process.env.NODE_ENV === "production"; context.res.clearCookie("OwnerToken", { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", path: "/" }); return "Owner logged out successfully"; },
+    
     updateMyOwnerProfile: async (_, updates, context) => { if (!context.user || context.user.role !== "OWNER") throw new Error("Unauthorized"); updates.verifyStatus = false; return await PropertyOwner.findByIdAndUpdate(context.user.id, { $set: updates }, { new: true }).populate("assignedBrokers"); },
     updateOwner: async (_, { id, ...updates }, context) => { if (!context.user || context.user.role !== "ADMIN") throw new Error("Unauthorized"); return await PropertyOwner.findByIdAndUpdate(id, { $set: updates }, { new: true }).populate("assignedBrokers"); },
     deleteOwner: async (_, { id }, context) => { if (!context.user || context.user.role !== "ADMIN") throw new Error("Unauthorized"); await PropertyOwner.findByIdAndDelete(id); return "Owner deleted"; },
@@ -156,10 +180,12 @@ export const resolvers = {
       await Property.findByIdAndDelete(id); return "Property deleted successfully";
     },
 
-    // 🟢 TENANT CRUD
     createTenant: async (_, { input }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized.");
-      return await new Tenant({ ...input }).save();
+      let payload = { ...input };
+      if (context.user.role === "OWNER") payload.ownedby = getOwnerIdFromCookie(context);
+      else if (context.user.role === "BROKER") payload.addedByBroker = getBrokerIdFromCookie(context);
+      return await new Tenant(payload).save();
     },
     updateTenant: async (_, { id, input }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized.");
@@ -168,18 +194,21 @@ export const resolvers = {
     deleteTenant: async (_, { id }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized.");
       await Tenant.findByIdAndDelete(id);
-      await Lease.deleteMany({ tenant: id }); // Clean up associated leases
+      await Lease.deleteMany({ tenant: id });
       return "Tenant Profile Deleted Successfully";
     },
 
-    // 🟢 LEASE CRUD
     createLease: async (_, { input }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized.");
       const property = await Property.findById(input.propertyId);
       if (!property) throw new Error("Property not found.");
       if (property.activeLease) throw new Error("This property is already actively rented!");
 
-      const newLease = await new Lease({ ...input, status: 'ACTIVE' }).save();
+      let payload = { ...input, status: 'ACTIVE' };
+      if (context.user.role === "OWNER") payload.ownedby = getOwnerIdFromCookie(context);
+      else if (context.user.role === "BROKER") payload.addedByBroker = getBrokerIdFromCookie(context);
+
+      const newLease = await new Lease(payload).save();
       property.activeLease = newLease._id;
       await property.save();
       return newLease;
@@ -195,16 +224,22 @@ export const resolvers = {
       if (!property) throw new Error("Property not found.");
       if (property.activeLease) throw new Error("This property is already actively rented!");
 
+      let ownerId = null; let brokerId = null;
+      if (context.user.role === "OWNER") ownerId = getOwnerIdFromCookie(context);
+      else if (context.user.role === "BROKER") brokerId = getBrokerIdFromCookie(context);
+
       const newTenant = await new Tenant({
         name: input.name, email: input.email, callNumber: input.callNumber, whatsappNumber: input.whatsappNumber,
         permanentAddress: input.permanentAddress, adharNumber: input.adharNumber, adharCardUrl: input.adharCardUrl,
-        panNumber: input.panNumber, panCardUrl: input.panCardUrl, bankDetails: input.bankDetails
+        panNumber: input.panNumber, panCardUrl: input.panCardUrl, bankDetails: input.bankDetails,
+        ownedby: ownerId, addedByBroker: brokerId
       }).save();
 
       const newLease = await new Lease({
         tenant: newTenant._id, property: property._id, status: 'ACTIVE',
         tenurestart: input.tenurestart, tenureend: input.tenureend, stepuptenure: input.stepuptenure, gst: input.gst,
-        agreedRent: input.agreedRent, agreedMaintenance: input.agreedMaintenance, depositAmount: input.depositAmount, rentAgreementUrl: input.rentAgreementUrl
+        agreedRent: input.agreedRent, agreedMaintenance: input.agreedMaintenance, depositAmount: input.depositAmount, rentAgreementUrl: input.rentAgreementUrl,
+        ownedby: ownerId, addedByBroker: brokerId
       }).save();
 
       property.activeLease = newLease._id;
@@ -222,7 +257,6 @@ export const resolvers = {
       return "Lease terminated and Property is now available.";
     },
 
-    // 🟢 INVOICE GENERATOR
     createInvoice: async (_, args, context) => {
       if (!context.user) throw new Error("Unauthorized");
       const invoiceDate = new Date();
@@ -243,30 +277,104 @@ export const resolvers = {
       return await Invoice.findByIdAndUpdate(id, { $set: { status } }, { new: true });
     },
 
-    // 🟢 PAYMENT ENGINE (Math fixed for legacy invoices)
-    recordPayment: async (_, { invoiceId, amount, paymentMethod, transactionId, notes }, context) => {
+    recordPayment: async (_, { invoiceId, amount, paymentMethod, transactionId, chequeNumber, chequeDepositDate, cashDepositDate, notes }, context) => {
       if (!context.user) throw new Error("Unauthorized");
 
       const invoice = await Invoice.findById(invoiceId);
       if (!invoice) throw new Error("Invoice not found.");
 
-      // Safely handle missing amountDue fields on legacy records
-      let currentDue = invoice.amountDue != null ? invoice.amountDue : invoice.totalAmount;
-      let currentPaid = invoice.amountPaid != null ? invoice.amountPaid : 0;
+      const currentDue = Number(invoice.amountDue ?? invoice.totalAmount ?? 0);
+      const currentPaid = Number(invoice.amountPaid ?? 0);
+      const amt = Number(amount);
 
-      if (amount > currentDue) throw new Error(`Amount exceeds due balance. Only ₹${currentDue} is due.`);
+      if (isNaN(amt) || amt <= 0) throw new Error("Invalid payment amount.");
+      if (amt > currentDue) throw new Error(`Amount exceeds due balance. Only ₹${currentDue} is due.`);
 
       const payment = await new Payment({
         invoice: invoice._id, tenant: invoice.tenant, property: invoice.property,
-        amount, paymentMethod, transactionId: transactionId || "N/A", notes
+        amount: amt, paymentMethod, 
+        transactionId: transactionId || null, 
+        chequeNumber: chequeNumber || null,
+        chequeDepositDate: chequeDepositDate || null,
+        cashDepositDate: cashDepositDate || null,
+        notes
       }).save();
 
-      invoice.amountPaid = currentPaid + amount;
-      invoice.amountDue = currentDue - amount;
+      invoice.amountPaid = currentPaid + amt;
+      invoice.amountDue = currentDue - amt;
       invoice.status = invoice.amountDue <= 0 ? "PAID" : "PARTIAL";
       await invoice.save();
 
       return payment;
+    },
+
+    createRazorpayOrder: async (_, { invoiceId, amount }, context) => {
+      if (!context.user) throw new Error("Unauthorized");
+      const invoice = await Invoice.findById(invoiceId);
+      if (!invoice) throw new Error("Invoice not found.");
+      let currentDue = invoice.amountDue != null ? invoice.amountDue : invoice.totalAmount;
+      if (amount > currentDue) throw new Error("Amount exceeds due balance.");
+      return { orderId: `order_${Math.floor(Math.random() * 1000000)}`, amount: amount, currency: "INR" };
+    },
+    verifyRazorpayPayment: async (_, { invoiceId, razorpayPaymentId, razorpayOrderId, razorpaySignature }, context) => {
+      if (!context.user) throw new Error("Unauthorized");
+      const amountPaid = 5000; // Dummy value for now
+      const invoice = await Invoice.findById(invoiceId);
+      let currentDue = invoice.amountDue != null ? invoice.amountDue : invoice.totalAmount;
+      let currentPaid = invoice.amountPaid != null ? invoice.amountPaid : 0;
+      
+      const payment = await new Payment({
+        invoice: invoice._id, tenant: invoice.tenant, property: invoice.property,
+        amount: amountPaid, paymentMethod: "RAZORPAY", transactionId: razorpayPaymentId, notes: `Online Payment Order: ${razorpayOrderId}`
+      }).save();
+      
+      invoice.amountPaid = currentPaid + amountPaid; invoice.amountDue = currentDue - amountPaid; invoice.status = invoice.amountDue <= 0 ? "PAID" : "PARTIAL";
+      await invoice.save();
+      return payment;
+    },
+
+    // 🟢 NEW: Mail Sender Mutation Resolver
+    sendDynamicMail: async (_, { tenantId, templateType, customMessage, invoiceId }, context) => {
+      if (!context.user) throw new Error("Unauthorized");
+
+      const tenant = await Tenant.findById(tenantId);
+      if (!tenant) throw new Error("Tenant not found");
+      
+      const ownerId = getOwnerIdFromCookie(context);
+      const owner = await PropertyOwner.findById(ownerId);
+      if (!owner) throw new Error("Owner not found");
+
+      let invoiceDetails = null;
+      if (invoiceId) {
+        const invoice = await Invoice.findById(invoiceId);
+        if (invoice) {
+          invoiceDetails = {
+            billType: invoice.billType,
+            billingMonth: invoice.billingMonth,
+            invoiceNo: invoice.invoiceNo,
+            totalAmount: invoice.totalAmount,
+            amountDue: invoice.amountDue != null ? invoice.amountDue : invoice.totalAmount
+          };
+        }
+      }
+
+      const emailData = {
+        tenantName: tenant.name,
+        ownerName: owner.name,
+        ownerPhone: owner.phone,
+        customMessage,
+        invoiceDetails
+      };
+
+      const { subject, html } = generateEmailTemplate(templateType, emailData);
+
+      try {
+        await sendDynamicEmail(tenant.email, subject, html);
+        return "Email sent successfully!";
+      } catch (error) {
+        console.error("Mailer Error:", error);
+        throw new Error("Failed to send email.");
+      }
     }
   }
 };

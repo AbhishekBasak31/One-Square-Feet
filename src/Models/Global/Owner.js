@@ -31,6 +31,18 @@ const OwnerSchema = new SCHEMA(
         type: Boolean,  
         default: false
     },
+    panno:{
+    type: String, 
+    },
+    aadharno:{
+    type: String, 
+    },
+    gst:{
+  type: String, 
+    },
+    digitalSignature:{
+  type: String, 
+    },
     pancard: {
         type: String, 
     },

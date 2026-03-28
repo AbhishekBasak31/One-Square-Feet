@@ -12,13 +12,16 @@ const TenantSchema = new SCHEMA({
   panNumber: { type: String, required: true },
   panCardUrl: { type: String, required: true },
   
-  // 🟢 NEW: Bank Details
   bankDetails: {
     accountName: { type: String, default: "" },
     accountNumber: { type: String, default: "" },
     ifscCode: { type: String, default: "" },
     bankName: { type: String, default: "" }
-  }
+  },
+
+  // 🟢 NEW: Ownership Tracking to prevent data leakage
+  ownedby: { type: mongoose.Schema.Types.ObjectId, ref: "PropertyOwner"},
+  addedByBroker: { type: mongoose.Schema.Types.ObjectId, ref: "Broker" }
 }, { timestamps: true });
 
 export const Tenant = mongoose.model("Tenant", TenantSchema);

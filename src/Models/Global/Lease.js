@@ -15,9 +15,13 @@ const LeaseSchema = new SCHEMA(
     
     agreedRent: { type: Number, required: true },
     agreedMaintenance: { type: Number, required: true },
-    depositAmount: { type: Number, required: true }, // 🟢 NEW: Deposit tracking
+    depositAmount: { type: Number, required: true }, 
     
-    rentAgreementUrl: { type: String, required: true } // Cloudinary URL
+    rentAgreementUrl: { type: String, required: true },
+
+    // 🟢 NEW: Ownership Tracking
+    ownedby: {type: mongoose.Schema.Types.ObjectId, ref: "PropertyOwner" },
+    addedByBroker: { type: mongoose.Schema.Types.ObjectId, ref: "Broker" }
   },
   { timestamps: true }
 );

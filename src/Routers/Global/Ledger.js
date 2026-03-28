@@ -21,10 +21,13 @@ router.get('/:tenantId/:fy', async (req, res) => {
     let invoiceQuery = { tenant: tenantId };
     
     if (startMonth && endMonth) {
+      // 🟢 CUSTOM RANGE: e.g. Feb to April
       invoiceQuery.billingMonth = { $gte: startMonth, $lte: endMonth };
     } else if (month && month !== 'All') {
+      // 🟢 SPECIFIC MONTH
       invoiceQuery.billingMonth = month;
     } else {
+      // 🟢 FINANCIAL YEAR
       invoiceQuery.financialYear = fy;
     }
 
@@ -69,9 +72,16 @@ router.get('/:tenantId/:fy', async (req, res) => {
 
     timeline.sort((a, b) => new Date(a.date) - new Date(b.date));
 
+    // 🟢 TALLY-STYLE RUNNING CALCULATIONS
     let runningBalance = 0;
+    let totalDebit = 0;
+    let totalCredit = 0;
+
     const entriesHtml = timeline.map(entry => {
       runningBalance += (entry.debit - entry.credit);
+      totalDebit += entry.debit;
+      totalCredit += entry.credit;
+
       const isCredit = runningBalance < 0;
       const displayBalance = Math.abs(runningBalance).toFixed(2);
       const balanceSuffix = runningBalance === 0 ? '' : (isCredit ? ' Cr' : ' Dr');
@@ -91,7 +101,19 @@ router.get('/:tenantId/:fy', async (req, res) => {
     }).join('');
 
     const finalBalance = Math.abs(runningBalance).toFixed(2);
+    const isFinalCredit = runningBalance < 0;
+    const finalBalanceSuffix = runningBalance === 0 ? '' : (isFinalCredit ? ' Cr' : ' Dr');
     const finalBalanceColor = runningBalance > 0 ? '#dc2626' : '#22c55e'; 
+
+    // 🟢 TOTALS FOOTER ROW (TALLY FORMAT)
+    const totalsHtml = `
+      <tr style="border-top: 2px solid #0F172A; background-color: #f1f5f9;">
+        <td colspan="2" class="text-right bold" style="font-size: 12px; padding-right: 15px; text-transform: uppercase;">Closing Totals:</td>
+        <td class="text-right bold" style="font-size: 12px;">₹ ${totalDebit.toFixed(2)}</td>
+        <td class="text-right bold" style="font-size: 12px; color: #22c55e;">₹ ${totalCredit.toFixed(2)}</td>
+        <td class="text-right bold" style="font-size: 12px; color: ${finalBalanceColor};">₹ ${finalBalance}${finalBalanceSuffix}</td>
+      </tr>
+    `;
 
     let headerSubtitle = `Financial Year: ${fy}`;
     if (startMonth && endMonth) headerSubtitle = `Period: ${startMonth} to ${endMonth}`;
@@ -142,7 +164,7 @@ router.get('/:tenantId/:fy', async (req, res) => {
         <table>
           <tr><th style="width: 12%;">Date</th><th style="width: 40%; text-align: left; padding-left: 15px;">Transaction Details</th><th style="width: 16%; text-align: right;">Debit (Billed) ₹</th><th style="width: 16%; text-align: right;">Credit (Paid) ₹</th><th style="width: 16%; text-align: right;">Balance ₹</th></tr>
           ${entriesHtml}
-        </table>
+          ${totalsHtml} </table>
         <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #94a3b8;">
           <p>*** End of Statement ***</p><p>Generated on ${new Date().toLocaleString('en-GB')} • Authorized System Print</p>
         </div>
@@ -152,7 +174,6 @@ router.get('/:tenantId/:fy', async (req, res) => {
 
     console.log("🚀 Launching Puppeteer for Ledger...");
 
-    // 🟢 SMART OS DETECTION (From PropertyPDF)
     const isWindows = process.platform === 'win32';
     const puppeteerArgs = [
       '--no-sandbox', 

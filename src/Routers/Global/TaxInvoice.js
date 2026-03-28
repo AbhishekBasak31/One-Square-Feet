@@ -1,9 +1,11 @@
 import express from 'express';
 import puppeteer from 'puppeteer';
+import axios from 'axios';
 import Invoice from '../../Models/Global/Invoice.js';
 
 const router = express.Router();
 
+// 🟢 Improved Number to Words (Handles Indian Rupees & Paisa)
 function numberToWords(num) {
   const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
   const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
@@ -16,7 +18,17 @@ function numberToWords(num) {
   str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
   str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
   str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
-  return str.trim() + ' Only';
+  return str.trim();
+}
+
+function convertAmountToWords(amount) {
+  const [rupees, paisa] = Number(amount).toFixed(2).split('.');
+  let str = numberToWords(Number(rupees));
+  if (str !== '') str = 'Rupees ' + str;
+  if (Number(paisa) > 0) {
+      str += (str ? ' and Paisa ' : 'Paisa ') + numberToWords(Number(paisa));
+  }
+  return `(${str} Only)`.replace(/  +/g, ' '); 
 }
 
 router.get('/:invoiceId', async (req, res) => {
@@ -29,63 +41,97 @@ router.get('/:invoiceId', async (req, res) => {
   try {
     console.log(`🔍 Querying Database for Invoice Data...`);
     
-    // 1. Try to find by direct Invoice ID first
     let invoice = await Invoice.findById(req.params.invoiceId)
       .populate('tenant')
       .populate({ path: 'property', populate: { path: 'ownedby' } });
 
-    // 2. SMART FALLBACK: If the UI passed a Tenant ID with month/year params
     if (!invoice && req.query.month && req.query.year) {
       const monthStr = String(req.query.month).padStart(2, '0');
       const billingMonth = `${req.query.year}-${monthStr}`; 
-      
-      invoice = await Invoice.findOne({ 
-        tenant: req.params.invoiceId, 
-        billingMonth: billingMonth 
-      })
-      .populate('tenant')
-      .populate({ path: 'property', populate: { path: 'ownedby' } });
+      invoice = await Invoice.findOne({ tenant: req.params.invoiceId, billingMonth: billingMonth })
+      .populate('tenant').populate({ path: 'property', populate: { path: 'ownedby' } });
     }
 
-    if (!invoice) {
-      console.log(`❌ WARNING: Invoice not found in database for this ID or month.`);
-      return res.status(404).send('Invoice not found in database for this month.');
-    }
-
+    if (!invoice) return res.status(404).send('Invoice not found in database.');
     console.log(`📄 Found Invoice: ${invoice.invoiceNo} | Tenant: ${invoice.tenant?.name}`);
 
     const tenant = invoice.tenant;
     const prop = invoice.property;
     
     const ownerData = prop.ownedby || prop.brokerOwnerDetails || {};
+    
+    // 🟢 strictly uses Owner Name
     const ownerName = ownerData.companyName || ownerData.name || ownerData.ownerName || 'Authorized Owner';
-    const ownerPhone = ownerData.phone || ownerData.ownerPhone || 'N/A';
-    const ownerPan = ownerData.pancard || 'N/A';
-
-    let particularsDesc = "";
-    let qtyStr = "-";
-    let rateStr = "-";
-
-    if (invoice.billType === 'ELECTRICITY') {
-      particularsDesc = `Electricity Consumption Charges for the month of ${invoice.billingMonth}.`;
-      qtyStr = `${invoice.electricDetails?.units || 0} Units`;
-      rateStr = `₹${invoice.electricDetails?.rate || 0} / unit`;
-    } else if (invoice.billType === 'MAINTENANCE') {
-      particularsDesc = `Common Area Maintenance (CAM) Charges for unit at ${prop.name} for the month of ${invoice.billingMonth}.`;
-      qtyStr = prop.superbuilderarea || prop.carpetarea || 'Flat Rate';
-    } else {
-      particularsDesc = `Monthly Rent for unit at ${prop.name} for the month of ${invoice.billingMonth}.`;
-      qtyStr = prop.carpetarea || 'Flat Rate';
+    const ownerPhone = ownerData.phone || ownerData.ownerPhone || '';
+    const ownerEmail = ownerData.email || '';
+    const ownerPan = ownerData.panno || ownerData.pancard || 'N/A';
+    const ownerGst = ownerData.gst || 'N/A';
+    const ownerAddress = ownerData.address || '';
+    
+    // 🟢 Fetch Signature Securely
+    let signatureBase64 = '';
+    if (ownerData.digitalSignature) {
+      try {
+        console.log("📝 Fetching Digital Signature image...");
+        const sigRes = await axios.get(ownerData.digitalSignature, { responseType: 'arraybuffer', timeout: 10000 });
+        const contentType = sigRes.headers['content-type'];
+        signatureBase64 = `data:${contentType};base64,${Buffer.from(sigRes.data, 'binary').toString('base64')}`;
+      } catch (e) {
+        console.error("⚠️ Could not fetch signature image", e.message);
+      }
     }
 
+    const isCommercial = ['Commercial', 'Office', 'Shop'].includes(prop.type);
+    
+    // 🟢 Build Full Address String for the Unit No.
+    const fullAddressArray = [
+      prop.address?.houseno,
+      prop.address?.street,
+      prop.address?.city,
+      prop.address?.state,
+      prop.address?.pincode
+    ].filter(Boolean);
+    const unitAddress = fullAddressArray.join(', ');
+
+    const placeOfSupply = prop.address?.state?.toUpperCase() || "WEST BENGAL";
+    const floorText = isCommercial ? "" : "NA";
+
+    // 🟢 HSN Logic
+    let hsnCode = "997211"; 
+    if (invoice.billType === 'ELECTRICITY') hsnCode = "2716";
+    else if (isCommercial) hsnCode = "997212";
+
+    // 🟢 Particulars Logic (Includes Property Name Explicitly)
+    let particularsDesc = "";
+    let qtyStr = "";
+    let rateStr = "";
+
+    if (invoice.billType === 'ELECTRICITY') {
+      particularsDesc = `Being <b>Electricity Charges</b> for using of Unit No. ${unitAddress} of <b>${prop.name}</b> for the month of <b>${invoice.billingMonth}</b>, as per actuals incurred.`;
+      qtyStr = invoice.electricDetails?.units ? `${invoice.electricDetails.units}` : "-";
+      rateStr = invoice.electricDetails?.rate ? `${invoice.electricDetails.rate}` : "-";
+    } else {
+      qtyStr = prop.superbuilderarea || prop.carpetarea || '-';
+      const parsedArea = parseFloat(qtyStr);
+      rateStr = (parsedArea && parsedArea > 0) ? (invoice.baseAmount / parsedArea).toFixed(2) : "-";
+
+      if (invoice.billType === 'MAINTENANCE') {
+        particularsDesc = `Being <b>Maintenance Charges</b> against common building facilities for using of Unit No. ${unitAddress} of <b>${prop.name}</b> for the month of <b>${invoice.billingMonth}</b>, as per actuals incurred.`;
+      } else {
+        particularsDesc = `Being <b>Rent Charges</b> for using of Unit No. ${unitAddress} of <b>${prop.name}</b> for the month of <b>${invoice.billingMonth}</b>.`;
+      }
+    }
+
+    // 🟢 Math & GST Labels
     const isGstApplied = invoice.cgst > 0 || invoice.sgst > 0;
+    const cgstRate = isGstApplied ? ((invoice.cgst / invoice.baseAmount) * 100).toFixed(1) : 0;
+    const sgstRate = isGstApplied ? ((invoice.sgst / invoice.baseAmount) * 100).toFixed(1) : 0;
 
     const actualDue = invoice.amountDue != null ? invoice.amountDue : invoice.totalAmount;
     const actualPaid = invoice.amountPaid != null ? invoice.amountPaid : 0;
-    
-    let statusColor = "red";
-    if (invoice.status === "PAID") statusColor = "green";
-    if (invoice.status === "PARTIAL") statusColor = "darkorange";
+
+    const invoiceDateStr = new Date(invoice.invoiceDate).toLocaleDateString('en-GB');
+    const timestampStr = new Date(invoice.invoiceDate).toLocaleString('en-GB');
 
     const htmlTemplate = `
       <!DOCTYPE html>
@@ -93,100 +139,135 @@ router.get('/:invoiceId', async (req, res) => {
       <head>
         <meta charset="UTF-8">
         <style>
-          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #111; font-size: 12px; }
-          .header-table { width: 100%; border-bottom: 2px solid #0F172A; padding-bottom: 10px; margin-bottom: 20px; }
-          .title { font-size: 24px; font-weight: bold; color: #0F172A; text-transform: uppercase; text-align: right; }
-          table.main-table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; margin-top: 20px; }
-          .main-table th { background-color: #f8f9fa; color: #0F172A; font-weight: bold; text-align: left; padding: 10px; border: 1px solid #ddd; }
-          .main-table td { border: 1px solid #ddd; padding: 10px; vertical-align: top; }
-          .bold { font-weight: bold; } .text-right { text-align: right; } .text-center { text-align: center; }
-          .footer { margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px; font-size: 10px; color: #555; }
+          body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; margin: 0; }
+          h2 { text-align: center; margin: 0 0 15px 0; font-size: 18px; font-weight: bold; text-transform: uppercase; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: -1px; }
+          td, th { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
+          .bold { font-weight: bold; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          
+          .no-border-bottom { border-bottom: none; }
+          .no-border-top { border-top: none; }
+          
+          .main-table-body td { height: 250px; } 
+          
+          .footer-section { padding: 10px; }
+          .signature-box { max-height: 50px; margin: 5px 0; display: block; }
+          .red-text { color: #dc2626; font-weight: bold; }
         </style>
       </head>
       <body>
-        <table class="header-table">
+        <h2>TAX INVOICE</h2>
+        
+        <table>
           <tr>
-            <td style="width: 50%">
-              <div style="font-size: 18px;" class="bold">${ownerName}</div>
-              <div>Phone: ${ownerPhone}</div>
-              <div>PAN: ${ownerPan}</div>
-            </td>
-            <td style="width: 50%" class="text-right">
-              <div class="title">TAX INVOICE</div>
-              <div class="bold" style="color: #64748b; font-size: 14px;">${invoice.billType} BILL</div>
-            </td>
-          </tr>
-        </table>
-
-        <table style="width: 100%; margin-bottom: 20px;">
-          <tr>
-            <td style="width: 50%; padding-right: 20px;">
-              <div class="bold" style="background-color: #f8f9fa; padding: 5px;">BILLED TO:</div>
-              <div class="bold" style="font-size: 14px; margin-top: 5px;">${tenant.name}</div>
-              <div>${prop.address?.houseno || ''}, ${prop.address?.street || ''}</div>
-              <div>${prop.address?.city || ''}, ${prop.address?.state || ''} - ${prop.address?.pincode || ''}</div>
-              <div style="margin-top: 5px;"><span class="bold">PAN:</span> ${tenant.panNumber || 'N/A'}</div>
+            <td style="width: 50%;">
+              <span class="bold" style="font-size: 14px;">${ownerName}</span><br>
+              ${ownerAddress.replace(/\n/g, '<br>')}<br>
+              <span class="bold">GSTIN: ${ownerGst}</span><br>
+              Email: ${ownerEmail}
             </td>
             <td style="width: 50%;">
-              <div class="bold" style="background-color: #f8f9fa; padding: 5px;">INVOICE DETAILS:</div>
-              <table style="width: 100%; margin-top: 5px;">
-                <tr><td class="bold">Invoice No:</td><td class="text-right">${invoice.invoiceNo}</td></tr>
-                <tr><td class="bold">Invoice Date:</td><td class="text-right">${new Date(invoice.invoiceDate).toLocaleDateString('en-GB')}</td></tr>
-                <tr><td class="bold">Billing Month:</td><td class="text-right">${invoice.billingMonth}</td></tr>
-                <tr><td class="bold">Status:</td><td class="text-right" style="color: ${statusColor}; font-weight: bold;">${invoice.status}</td></tr>
-              </table>
+              Bill to:<br>
+              <span class="bold" style="font-size: 14px;">${tenant.name}</span><br>
+              ${tenant.permanentAddress.replace(/\n/g, '<br>')}<br>
+              <span class="bold">GSTIN: ${tenant.gst || 'N/A'}</span><br>
+              Email: ${tenant.email || 'N/A'}
             </td>
           </tr>
         </table>
 
-        <table class="main-table">
+        <table>
           <tr>
-            <th style="width: 50%">Description of Service</th>
-            <th style="width: 15%" class="text-center">Qty / Area</th>
-            <th style="width: 15%" class="text-center">Rate</th>
-            <th style="width: 20%" class="text-right">Amount (INR)</th>
+            <td style="width: 50%;">Invoice No: <b>${invoice.invoiceNo}</b></td>
+            <td style="width: 25%;">Inv. Date: <b>${invoiceDateStr}</b></td>
+            <td style="width: 25%;">Place of Supply<br><b style="text-transform: uppercase;">${placeOfSupply}</b></td>
           </tr>
           <tr>
-            <td style="min-height: 120px; height: 120px;">${particularsDesc}</td>
-            <td class="text-center">${qtyStr}</td>
-            <td class="text-center">${rateStr}</td>
+            <td style="width: 50%;">Unit No.: <b>${unitAddress}</b></td>
+            <td style="width: 25%;">Floor: <b>${floorText}</b></td>
+            <td style="width: 25%;">HSN Code: <b>${hsnCode}</b></td>
+          </tr>
+        </table>
+
+        <table>
+          <tr>
+            <th style="width: 50%; text-align: center;">Particulars</th>
+            <th style="width: 20%; text-align: center;">Chargeable Area<br>(Sq. ft)</th>
+            <th style="width: 15%; text-align: center;">Rate</th>
+            <th style="width: 20%; text-align: center;">Amount (Rs.)</th>
+          </tr>
+          <tr class="main-table-body">
+            <td>${particularsDesc}</td>
+            <td class="text-right">${qtyStr}</td>
+            <td class="text-right">${rateStr}</td>
             <td class="text-right">${invoice.baseAmount.toFixed(2)}</td>
           </tr>
           <tr>
-            <td colspan="3" class="bold text-right">TAXABLE VALUE:</td>
+            <td colspan="3" class="bold text-right">AMOUNT:</td>
             <td class="bold text-right">${invoice.baseAmount.toFixed(2)}</td>
           </tr>
           ${isGstApplied ? `
-          <tr><td colspan="3" class="text-right">Add: CGST</td><td class="text-right">${invoice.cgst.toFixed(2)}</td></tr>
-          <tr><td colspan="3" class="text-right">Add: SGST</td><td class="text-right">${invoice.sgst.toFixed(2)}</td></tr>
+          <tr>
+            <td colspan="3" class="bold text-right">CGST @ ${cgstRate}%</td>
+            <td class="bold text-right">${invoice.cgst.toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td colspan="3" class="bold text-right">SGST @ ${sgstRate}%</td>
+            <td class="bold text-right">${invoice.sgst.toFixed(2)}</td>
+          </tr>
           ` : ''}
           <tr>
-            <td colspan="3" class="bold text-right" style="font-size: 14px;">GRAND TOTAL:</td>
-            <td class="bold text-right" style="font-size: 14px; background-color: #f8f9fa;">₹ ${invoice.totalAmount.toFixed(2)}</td>
+            <td colspan="3" class="bold text-right" style="font-size: 14px;">TOTAL NET AMOUNT:</td>
+            <td class="bold text-right" style="font-size: 14px;">${invoice.totalAmount.toFixed(2)}</td>
           </tr>
           
-          ${actualPaid > 0 ? `
           <tr>
-            <td colspan="3" class="bold text-right" style="color: green;">LESS: AMOUNT PAID:</td>
-            <td class="bold text-right" style="color: green;">- ₹ ${actualPaid.toFixed(2)}</td>
+            <td colspan="3" class="bold text-right" style="color: #16a34a;">LESS: AMOUNT PAID:</td>
+            <td class="bold text-right" style="color: #16a34a;">- ${actualPaid.toFixed(2)}</td>
           </tr>
-          ` : ''}
           <tr>
-            <td colspan="3" class="bold text-right" style="font-size: 15px; color: ${actualDue > 0 ? '#dc2626' : 'green'};">BALANCE DUE:</td>
-            <td class="bold text-right" style="font-size: 15px; color: ${actualDue > 0 ? '#dc2626' : 'green'}; background-color: ${actualDue > 0 ? '#fef2f2' : '#f0fdf4'};">₹ ${actualDue.toFixed(2)}</td>
+            <td colspan="3" class="bold text-right" style="font-size: 14px; color: ${actualDue > 0 ? '#dc2626' : '#16a34a'};">BALANCE DUE:</td>
+            <td class="bold text-right" style="font-size: 14px; color: ${actualDue > 0 ? '#dc2626' : '#16a34a'};">
+              ${actualDue.toFixed(2)}
+            </td>
           </tr>
 
           <tr>
-            <td colspan="4" class="text-center" style="font-style: italic;">Amount in words: Rupees ${numberToWords(Math.round(invoice.totalAmount))}</td>
+            <td colspan="4" class="text-center" style="font-style: italic;">
+              ${convertAmountToWords(invoice.totalAmount)}
+            </td>
           </tr>
         </table>
+
+        <table>
+          <tr>
+            <td style="width: 50%; vertical-align: top;">
+              For <span class="bold">${ownerName}</span><br>
+              ${signatureBase64 ? `<img src="${signatureBase64}" class="signature-box"/>` : '<br><br><br>'}
+              <span class="bold" style="font-size: 16px;">${ownerName}</span><br>
+              <span style="font-size: 10px; color: #555;">
+                Digitally signed by ${ownerName}<br>
+                Date: ${timestampStr}
+              </span>
+            </td>
+            <td style="width: 50%; vertical-align: top;">
+              Our PAN: <span class="bold">${ownerPan}</span><br><br>
+              Our <span class="red-text">NEW Bank</span> Account Details:<br>
+              <span class="bold">${ownerData.bankDetails?.accountName || 'N/A'}</span><br>
+              ${ownerData.bankDetails?.bankName || 'N/A'}<br>
+              <span class="bold">A/c No: ${ownerData.bankDetails?.accountNumber || 'N/A'} IFSC: ${ownerData.bankDetails?.ifscCode || 'N/A'}</span>
+            </td>
+          </tr>
+        </table>
+
       </body>
       </html>
     `;
 
     console.log("🚀 Launching Puppeteer for Tax Invoice...");
 
-    // 🟢 SMART OS DETECTION (From PropertyPDF)
     const isWindows = process.platform === 'win32';
     const puppeteerArgs = [
       '--no-sandbox', 
