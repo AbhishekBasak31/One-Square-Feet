@@ -4,12 +4,12 @@ export const typeDefs = `#graphql
   type BankDetails { accountName: String accountNumber: String ifscCode: String bankName: String }
   input BankDetailsInput { accountName: String accountNumber: String ifscCode: String bankName: String }
 
-  type Tenant { 
+type Tenant { 
     _id: ID! name: String! email: String! callNumber: String! whatsappNumber: String! 
     permanentAddress: String! adharNumber: String! adharCardUrl: String! panNumber: String! 
-    panCardUrl: String! bankDetails: BankDetails createdAt: String updatedAt: String 
-    ownedby: PropertyOwner      # 🟢 ADDED
-    addedByBroker: Broker       # 🟢 ADDED
+    panCardUrl: String! gst: String bankDetails: BankDetails createdAt: String updatedAt: String 
+    ownedby: PropertyOwner
+    addedByBroker: Broker
   }
 
   type Lease {

@@ -198,13 +198,20 @@ export const resolvers = {
       return "Tenant Profile Deleted Successfully";
     },
 
-    createLease: async (_, { input }, context) => {
+createLease: async (_, { input }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized.");
       const property = await Property.findById(input.propertyId);
       if (!property) throw new Error("Property not found.");
       if (property.activeLease) throw new Error("This property is already actively rented!");
 
-      let payload = { ...input, status: 'ACTIVE' };
+      // 🟢 FIX: Map tenantId to 'tenant' and propertyId to 'property' for Mongoose!
+      let payload = { 
+          ...input, 
+          tenant: input.tenantId, 
+          property: input.propertyId, 
+          status: 'ACTIVE' 
+      };
+      
       if (context.user.role === "OWNER") payload.ownedby = getOwnerIdFromCookie(context);
       else if (context.user.role === "BROKER") payload.addedByBroker = getBrokerIdFromCookie(context);
 

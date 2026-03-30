@@ -11,7 +11,7 @@ const TenantSchema = new SCHEMA({
   adharCardUrl: { type: String, required: true },
   panNumber: { type: String, required: true },
   panCardUrl: { type: String, required: true },
-  
+  gst:{type: String},
   bankDetails: {
     accountName: { type: String, default: "" },
     accountNumber: { type: String, default: "" },

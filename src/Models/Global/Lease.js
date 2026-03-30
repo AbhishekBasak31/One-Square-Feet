@@ -17,7 +17,7 @@ const LeaseSchema = new SCHEMA(
     agreedMaintenance: { type: Number, required: true },
     depositAmount: { type: Number, required: true }, 
     
-    rentAgreementUrl: { type: String, required: true },
+    rentAgreementUrl:[{ type: String, required: true },],
 
     // 🟢 NEW: Ownership Tracking
     ownedby: {type: mongoose.Schema.Types.ObjectId, ref: "PropertyOwner" },
