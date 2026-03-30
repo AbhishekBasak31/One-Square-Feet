@@ -61,7 +61,9 @@ const PropertySchema = new SCHEMA(
     // ==========================================
     // 🟢 OWNER TRACKING
     // ==========================================
-    
+    Floor:{
+    type: String,
+    },
     // 1. Registered Platform Owner (If the owner has an account on your app)
     ownedby: {
         type: mongoose.Schema.Types.ObjectId,

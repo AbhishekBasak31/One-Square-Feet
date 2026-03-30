@@ -94,7 +94,9 @@ router.get('/:invoiceId', async (req, res) => {
     const unitAddress = fullAddressArray.join(', ');
 
     const placeOfSupply = prop.address?.state?.toUpperCase() || "WEST BENGAL";
-    const floorText = isCommercial ? "" : "NA";
+    
+    // 🟢 UPDATED: Dynamically use Floor data if available
+    const floorText = prop.Floor ? prop.Floor : (isCommercial ? "" : "NA");
 
     // 🟢 HSN Logic
     let hsnCode = "997211"; 

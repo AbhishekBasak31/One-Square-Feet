@@ -52,12 +52,13 @@ export const resolvers = {
       else if (context.user.role === "BROKER") filter.addedByBroker = getBrokerIdFromCookie(context); 
       return await Property.find(filter).sort({ createdAt: -1 }).populate("ownedby").populate("assignedBrokers").populate("addedByBroker"); 
     },
-    getPropertyById: async (_, { id }, context) => {
+   getPropertyById: async (_, { id }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
       const property = await Property.findById(id).populate("ownedby").populate("assignedBrokers").populate("addedByBroker"); 
       if (!property) throw new Error("Property not found");
       return property;
     },
+    
     getMyAssignedProperties: async (_, __, context) => {
       if (!context.user || context.user.role !== "BROKER") throw new Error("Unauthorized Broker.");
       const broker = await Broker.findById(context.user.id);
@@ -158,9 +159,12 @@ export const resolvers = {
       } else if (context.user.role === "BROKER") { args.addedByBroker = getBrokerIdFromCookie(context); }
       const property = await new Property(args).save(); return await property.populate(["ownedby", "assignedBrokers", "addedByBroker"]);
     },
+    
     updateProperty: async (_, { id, ...updates }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
       const existingProperty = await Property.findById(id); if (!existingProperty) throw new Error("Property not found");
+      
+      // 🟢 Security: Prevent users from reassigning property ownership manually
       if (context.user.role === "OWNER") {
         const currentOwnerId = getOwnerIdFromCookie(context);
         if (!existingProperty.ownedby || existingProperty.ownedby.toString() !== currentOwnerId.toString()) throw new Error("Unauthorized");
@@ -172,8 +176,10 @@ export const resolvers = {
         if (!isAssigned && !isCreator) throw new Error("Unauthorized");
         delete updates.ownedby; 
       }
+      
       return await Property.findByIdAndUpdate(id, { $set: updates }, { new: true }).populate(["ownedby", "assignedBrokers", "addedByBroker"]);
     },
+    
     deleteProperty: async (_, { id }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
       const existingProperty = await Property.findById(id); if (!existingProperty) throw new Error("Property not found");

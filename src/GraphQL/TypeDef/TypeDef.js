@@ -52,16 +52,35 @@ type Tenant {
   type VisibilitySettings { showAddressToFreeBrokers: Boolean showOwnerDetailsToFreeBrokers: Boolean showReraToFreeBrokers: Boolean }
   type BrokerOwnerDetails { ownerType: String companyName: String ownerName: String ownerPhone: String contactPersonName: String contactPersonPhone: String keyPersonName: String keyPersonPhone: String }
   
-  type Property { _id: ID! type: String name: String img: [String] video: [String] price: String maintenanceCost: String rental: Boolean selling: Boolean address: PropertyAddress rera: String cc: Boolean mutation: Boolean furnished: Boolean carpetarea: String superbuilderarea: String landarea: String propertyAge: Float verified: Boolean noofbedrooms: String noofbathrooms: String noofhalls: String noofkitchens: String noofdrawingrooms: String noofbalcony: String noofparking: String description: String propertypapers:[String] amenities: [String] ownedby: PropertyOwner brokerOwnerDetails: BrokerOwnerDetails assignedBrokers: [Broker] addedByBroker: Broker visibilitySettings: VisibilitySettings activeLease: Lease createdAt: String updatedAt: String }
+  type Property { 
+    _id: ID! type: String name: String img: [String] video: [String] price: String maintenanceCost: String 
+    rental: Boolean selling: Boolean address: PropertyAddress rera: String cc: Boolean mutation: Boolean 
+    furnished: Boolean carpetarea: String superbuilderarea: String landarea: String propertyAge: Float 
+    verified: Boolean noofbedrooms: String noofbathrooms: String noofhalls: String noofkitchens: String 
+    noofdrawingrooms: String noofbalcony: String noofparking: String Floor: String description: String 
+    propertypapers: [String] amenities: [String] ownedby: PropertyOwner brokerOwnerDetails: BrokerOwnerDetails 
+    assignedBrokers: [Broker] addedByBroker: Broker visibilitySettings: VisibilitySettings 
+    activeLease: Lease createdAt: String updatedAt: String 
+  }
   
   input AddressInput { houseno: String! street: String! city: String! state: String! pincode: String! }
   input VisibilitySettingsInput { showAddressToFreeBrokers: Boolean showOwnerDetailsToFreeBrokers: Boolean showReraToFreeBrokers: Boolean }
   input BrokerOwnerDetailsInput { ownerType: String companyName: String ownerName: String ownerPhone: String contactPersonName: String contactPersonPhone: String keyPersonName: String keyPersonPhone: String }
   input ClientInput { name: String! Propertyquery: String! deadline: String email: String! phone: String! remark: String }
 
-  input TenantInput { name: String! email: String! callNumber: String! whatsappNumber: String! permanentAddress: String! adharNumber: String! adharCardUrl: String! panNumber: String! panCardUrl: String! bankDetails: BankDetailsInput }
+  input TenantInput { 
+    name: String! email: String! callNumber: String! whatsappNumber: String! 
+    permanentAddress: String! adharNumber: String! adharCardUrl: String! 
+    panNumber: String! panCardUrl: String! gst: String bankDetails: BankDetailsInput 
+  }
   input LeaseInput { tenantId: ID! propertyId: ID! tenurestart: String! tenureend: String! stepuptenure: String! gst: String agreedRent: Float! agreedMaintenance: Float! depositAmount: Float! rentAgreementUrl: String! }
-  input TenantLeaseInput { name: String! email: String! callNumber: String! whatsappNumber: String! permanentAddress: String! adharNumber: String! adharCardUrl: String! panNumber: String! panCardUrl: String! bankDetails: BankDetailsInput propertyId: ID! tenurestart: String! tenureend: String! stepuptenure: String! gst: String agreedRent: Float! agreedMaintenance: Float! depositAmount: Float! rentAgreementUrl: String! }
+  input TenantLeaseInput { 
+    name: String! email: String! callNumber: String! whatsappNumber: String! 
+    permanentAddress: String! adharNumber: String! adharCardUrl: String! 
+    panNumber: String! panCardUrl: String! tenantGst: String bankDetails: BankDetailsInput 
+    propertyId: ID! tenurestart: String! tenureend: String! stepuptenure: String! 
+    gst: String agreedRent: Float! agreedMaintenance: Float! depositAmount: Float! rentAgreementUrl: String! 
+  }
 
   type Query {
     getBrokers: [Broker]
@@ -106,8 +125,12 @@ type Tenant {
     updateOwner(id: ID!, ownerType: String, companyName: String, name: String, email: String, phone: String, address: String, contactPersonName: String, contactPersonPhone: String, keyPersonName: String, keyPersonPhone: String, planType: String, planExpiryDate: String, assignedBrokers: [ID], verifyStatus: Boolean, pancard: String, aadhar: String, panno: String, aadharno: String, gst: String, digitalSignature: String, profilephoto: String, bankDetails: BankDetailsInput): PropertyOwner!
     deleteOwner(id: ID!): String!
 
-    createProperty(type: String!, name: String!, img: [String]!, video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput!, rera: String!, cc: Boolean!, mutation: Boolean!, furnished: Boolean!, carpetarea: String!, superbuilderarea: String!, landarea: String!, propertyAge: Float, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, description: String!, amenities: [String]!, ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput): Property!
-    updateProperty(id: ID!, type: String, name: String, img: [String], video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput, rera: String, cc: Boolean, mutation: Boolean, furnished: Boolean, carpetarea: String, superbuilderarea: String, landarea: String, propertyAge: Float, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, description: String, amenities: [String], ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput): Property!
+    # 🟢 UPDATED: Added $Floor: String
+    createProperty(type: String!, name: String!, img: [String]!, video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput!, rera: String!, cc: Boolean!, mutation: Boolean!, furnished: Boolean!, carpetarea: String!, superbuilderarea: String!, landarea: String!, propertyAge: Float, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, Floor: String, description: String!, amenities: [String]!, ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput): Property!
+    
+    # 🟢 UPDATED: Added $Floor: String
+    updateProperty(id: ID!, type: String, name: String, img: [String], video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput, rera: String, cc: Boolean, mutation: Boolean, furnished: Boolean, carpetarea: String, superbuilderarea: String, landarea: String, propertyAge: Float, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, Floor: String, description: String, amenities: [String], ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput): Property!
+    
     deleteProperty(id: ID!): String!
 
     createTenant(input: TenantInput!): Tenant!
