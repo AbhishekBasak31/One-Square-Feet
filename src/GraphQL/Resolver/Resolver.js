@@ -45,20 +45,19 @@ export const resolvers = {
     getMyOwnerProfile: async (_, __, context) => { if (!context.user || context.user.role !== "OWNER") throw new Error("Unauthorized"); return await PropertyOwner.findById(context.user.id); },
     getOwnerById: async (_, { id }, context) => { if (!context.user || context.user.role !== "ADMIN") throw new Error("Unauthorized"); return await PropertyOwner.findById(id).populate("assignedBrokers"); },
     
-    getProperties: async (_, __, context) => {
+ getProperties: async (_, __, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
       let filter = {};
       if (context.user.role === "OWNER") filter.ownedby = getOwnerIdFromCookie(context); 
       else if (context.user.role === "BROKER") filter.addedByBroker = getBrokerIdFromCookie(context); 
       return await Property.find(filter).sort({ createdAt: -1 }).populate("ownedby").populate("assignedBrokers").populate("addedByBroker"); 
     },
-   getPropertyById: async (_, { id }, context) => {
+    getPropertyById: async (_, { id }, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
       const property = await Property.findById(id).populate("ownedby").populate("assignedBrokers").populate("addedByBroker"); 
       if (!property) throw new Error("Property not found");
       return property;
     },
-    
     getMyAssignedProperties: async (_, __, context) => {
       if (!context.user || context.user.role !== "BROKER") throw new Error("Unauthorized Broker.");
       const broker = await Broker.findById(context.user.id);
@@ -135,9 +134,16 @@ export const resolvers = {
     loginBroker: async (_, { email, password }, context) => { const broker = await Broker.findOne({ email }); if (!broker || !(await broker.comparePassword(password))) throw new Error("Invalid credentials"); const token = broker.generateAccessToken(); broker.lastLoginAt = new Date(); await broker.save(); const isProd = process.env.NODE_ENV === "production"; context.res.cookie("BrokerToken", token, { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", path: "/", maxAge: 24 * 60 * 60 * 1000 }); return { message: "Broker login successful", broker, token }; },
     logoutBroker: async (_, __, context) => { const isProd = process.env.NODE_ENV === "production"; context.res.clearCookie("BrokerToken", { httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "lax", path: "/" }); return "Broker logged out successfully"; },
     
-    updateBroker: async (_, { id, ...updates }) => await Broker.findByIdAndUpdate(id, { $set: updates }, { new: true }),
-    deleteBroker: async (_, { id }) => { await Broker.findByIdAndDelete(id); await Property.updateMany({ assignedBrokers: id }, { $pull: { assignedBrokers: id } }); await PropertyOwner.updateMany({ assignedBrokers: id }, { $pull: { assignedBrokers: id } }); return "Broker deleted"; },
+updateBroker: async (_, { id, ...updates }) => {
+      return await Broker.findByIdAndUpdate(id, { $set: updates }, { new: true });
+    },
     
+    deleteBroker: async (_, { id }) => { 
+      await Broker.findByIdAndDelete(id); 
+      await Property.updateMany({ assignedBrokers: id }, { $pull: { assignedBrokers: id } }); 
+      await PropertyOwner.updateMany({ assignedBrokers: id }, { $pull: { assignedBrokers: id } }); 
+      return "Broker deleted"; 
+    },   
     addBrokerClient: async (_, { clientData }, context) => { if (!context.user || context.user.role !== "BROKER") throw new Error("Unauthorized"); const brokerId = getBrokerIdFromCookie(context); return await Broker.findByIdAndUpdate(brokerId, { $push: { myclients: clientData } }, { new: true }); },
     updateBrokerClientStatus: async (_, { clientId, status }, context) => { if (!context.user || context.user.role !== "BROKER") throw new Error("Unauthorized"); const brokerId = getBrokerIdFromCookie(context); return await Broker.findOneAndUpdate({ _id: brokerId, "myclients._id": clientId }, { $set: { "myclients.$.status": status } }, { new: true }); },
     deleteBrokerClient: async (_, { clientId }, context) => { if (!context.user || context.user.role !== "BROKER") throw new Error("Unauthorized"); const brokerId = getBrokerIdFromCookie(context); return await Broker.findByIdAndUpdate(brokerId, { $pull: { myclients: { _id: clientId } } }, { new: true }); },
@@ -150,7 +156,7 @@ export const resolvers = {
     updateOwner: async (_, { id, ...updates }, context) => { if (!context.user || context.user.role !== "ADMIN") throw new Error("Unauthorized"); return await PropertyOwner.findByIdAndUpdate(id, { $set: updates }, { new: true }).populate("assignedBrokers"); },
     deleteOwner: async (_, { id }, context) => { if (!context.user || context.user.role !== "ADMIN") throw new Error("Unauthorized"); await PropertyOwner.findByIdAndDelete(id); return "Owner deleted"; },
 
-    createProperty: async (_, args, context) => {
+ createProperty: async (_, args, context) => {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
       if (context.user.role === "OWNER") {
         const ownerId = getOwnerIdFromCookie(context); const ownerDoc = await PropertyOwner.findById(ownerId);
@@ -164,7 +170,6 @@ export const resolvers = {
       if (!context.user || !["ADMIN", "OWNER", "BROKER"].includes(context.user.role)) throw new Error("Unauthorized");
       const existingProperty = await Property.findById(id); if (!existingProperty) throw new Error("Property not found");
       
-      // 🟢 Security: Prevent users from reassigning property ownership manually
       if (context.user.role === "OWNER") {
         const currentOwnerId = getOwnerIdFromCookie(context);
         if (!existingProperty.ownedby || existingProperty.ownedby.toString() !== currentOwnerId.toString()) throw new Error("Unauthorized");

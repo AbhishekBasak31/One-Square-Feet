@@ -5,7 +5,7 @@ const InvoiceSchema = new SCHEMA({
   invoiceNo: { type: String, required: true, unique: true },
   tenant: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", required: true },
   property: { type: mongoose.Schema.Types.ObjectId, ref: "Property", required: true },
-  billType: { type: String, enum: ["RENT", "MAINTENANCE", "ELECTRICITY"], required: true },
+  billType: { type: String, enum: ["RENT", "MAINTENANCE","FACILITIES", "ELECTRICITY"], required: true },
   billingMonth: { type: String, required: true }, 
   financialYear: { type: String, required: true }, 
   invoiceDate: { type: Date, default: Date.now },

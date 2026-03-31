@@ -95,7 +95,7 @@ router.get('/:invoiceId', async (req, res) => {
 
     const placeOfSupply = prop.address?.state?.toUpperCase() || "WEST BENGAL";
     
-    // 🟢 UPDATED: Dynamically use Floor data if available
+    // 🟢 Dynamically use Floor data if available
     const floorText = prop.Floor ? prop.Floor : (isCommercial ? "" : "NA");
 
     // 🟢 HSN Logic
@@ -119,6 +119,9 @@ router.get('/:invoiceId', async (req, res) => {
 
       if (invoice.billType === 'MAINTENANCE') {
         particularsDesc = `Being <b>Maintenance Charges</b> against common building facilities for using of Unit No. ${unitAddress} of <b>${prop.name}</b> for the month of <b>${invoice.billingMonth}</b>, as per actuals incurred.`;
+      } else if (invoice.billType === 'FACILITIES') {
+        // 🟢 NEW: Added logic for FACILITIES billType
+        particularsDesc = `Being <b>Facilities Charges</b> for using of Unit No. ${unitAddress} of <b>${prop.name}</b> for the month of <b>${invoice.billingMonth}</b>.`;
       } else {
         particularsDesc = `Being <b>Rent Charges</b> for using of Unit No. ${unitAddress} of <b>${prop.name}</b> for the month of <b>${invoice.billingMonth}</b>.`;
       }

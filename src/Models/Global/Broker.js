@@ -30,6 +30,12 @@ const BrokerSchema = new SCHEMA(
     aadharno:{
     type: String, 
     },
+    gstno:{
+    type: String, 
+    },
+    rerano:{
+    type: String,
+    },
     digitalSignature:{
   type: String, 
     },

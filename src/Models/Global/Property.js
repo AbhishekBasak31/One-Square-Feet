@@ -79,7 +79,16 @@ const PropertySchema = new SCHEMA(
         contactPersonName: { type: String },
         contactPersonPhone: { type: String },
         keyPersonName: { type: String },
-        keyPersonPhone: { type: String }
+        keyPersonPhone: { type: String },
+        gstno:{ type: String },
+        panno:{ type: String },
+        aadharno:{ type: String },
+      ownerbankDetails: {
+      owneraccountName: { type: String, default: "" },
+      owneraccountNumber: { type: String, default: "" },
+      ownerifscCode: { type: String, default: "" },
+      ownerbankName: { type: String, default: "" }
+  },
     },
 
     assignedBrokers: [{

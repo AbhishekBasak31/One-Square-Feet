@@ -40,22 +40,48 @@ type Tenant {
 
   type Client { _id: ID name: String Propertyquery: String deadline: String status: Boolean assigneddate: String email: String phone: String remark: String }
   
-  type Broker { _id: ID! name: String email: String phone: String profilepic: String rera: String pancard: String aadhar: String panno: String aadharno: String digitalSignature: String gst: String businessType: String businessregistration: String localtradelicense: String brokerageagreement: String isVerified: Boolean planType: String planExpiryDate: String bankDetails: BankDetails createdAt: String lastLoginAt: String myclients: [Client] }
+type Broker { 
+    _id: ID! 
+    name: String 
+    email: String 
+    phone: String 
+    profilepic: String 
+    rera: String            # File URL
+    rerano: String          # 🟢 Text Number
+    pancard: String         # File URL
+    panno: String           # Text Number
+    aadhar: String          # File URL
+    aadharno: String        # Text Number
+    gst: String             # File URL
+    gstno: String           # Text Number
+    digitalSignature: String 
+    businessType: String 
+    businessregistration: String 
+    localtradelicense: String 
+    brokerageagreement: String 
+    isVerified: Boolean 
+    planType: String 
+    planExpiryDate: String 
+    bankDetails: BankDetails 
+    createdAt: String 
+    lastLoginAt: String 
+    myclients: [Client] 
+  }
   
   type PropertyOwner { _id: ID! ownerType: String companyName: String name: String email: String phone: String address: String contactPersonName: String contactPersonPhone: String keyPersonName: String keyPersonPhone: String planType: String assignedBrokers: [Broker] planExpiryDate: String verifyStatus: Boolean pancard: String aadhar: String panno: String aadharno: String gst: String digitalSignature: String profilephoto: String bankDetails: BankDetails createdAt: String lastLoginAt: String }
   
   type AdminAuthResponse { message: String!, admin: Admin, token: String }
-  type BrokerAuthResponse { message: String!, broker: Broker, token: String }
+type BrokerAuthResponse { message: String!, broker: Broker, token: String }
   type OwnerAuthResponse { message: String!, owner: PropertyOwner, token: String }
   
   type PropertyAddress { houseno: String street: String city: String state: String pincode: String }
   type VisibilitySettings { showAddressToFreeBrokers: Boolean showOwnerDetailsToFreeBrokers: Boolean showReraToFreeBrokers: Boolean }
   type BrokerOwnerDetails { ownerType: String companyName: String ownerName: String ownerPhone: String contactPersonName: String contactPersonPhone: String keyPersonName: String keyPersonPhone: String }
   
-  type Property { 
+type Property { 
     _id: ID! type: String name: String img: [String] video: [String] price: String maintenanceCost: String 
     rental: Boolean selling: Boolean address: PropertyAddress rera: String cc: Boolean mutation: Boolean 
-    furnished: Boolean carpetarea: String superbuilderarea: String landarea: String propertyAge: Float 
+    furnished: Boolean carpetarea: String superbuilderarea: String landarea: String propertyAge: String 
     verified: Boolean noofbedrooms: String noofbathrooms: String noofhalls: String noofkitchens: String 
     noofdrawingrooms: String noofbalcony: String noofparking: String Floor: String description: String 
     propertypapers: [String] amenities: [String] ownedby: PropertyOwner brokerOwnerDetails: BrokerOwnerDetails 
@@ -91,7 +117,7 @@ type Tenant {
     getMyOwnerProfile: PropertyOwner
     getProperties: [Property]
     getPropertyById(id: ID!): Property
-    getMyAssignedProperties: [Property] 
+    getMyAssignedProperties: [Property]
     getMyAssignedBrokers: [Broker]
     getLeases: [Lease]
     getLeaseById(id: ID!): Lease
@@ -110,7 +136,8 @@ type Tenant {
     loginBroker(email: String!, password: String!): BrokerAuthResponse!
     logoutBroker: String!
     
-    updateBroker(id: ID!, name: String, email: String, phone: String, profilepic: String, rera: String, pancard: String, aadhar: String, panno: String, aadharno: String, digitalSignature: String, gst: String, businessType: String, businessregistration: String, localtradelicense: String, brokerageagreement: String, isVerified: Boolean, planType: String, planExpiryDate: String, bankDetails: BankDetailsInput): Broker!
+  # 🟢 Ensure rerano, gstno, panno, aadharno are all here!
+    updateBroker(id: ID!, name: String, email: String, phone: String, profilepic: String, rera: String, rerano: String, pancard: String, aadhar: String, panno: String, aadharno: String, gstno: String, digitalSignature: String, gst: String, businessType: String, businessregistration: String, localtradelicense: String, brokerageagreement: String, isVerified: Boolean, planType: String, planExpiryDate: String, bankDetails: BankDetailsInput): Broker!
     deleteBroker(id: ID!): String!
 
     addBrokerClient(clientData: ClientInput!): Broker!
@@ -125,12 +152,8 @@ type Tenant {
     updateOwner(id: ID!, ownerType: String, companyName: String, name: String, email: String, phone: String, address: String, contactPersonName: String, contactPersonPhone: String, keyPersonName: String, keyPersonPhone: String, planType: String, planExpiryDate: String, assignedBrokers: [ID], verifyStatus: Boolean, pancard: String, aadhar: String, panno: String, aadharno: String, gst: String, digitalSignature: String, profilephoto: String, bankDetails: BankDetailsInput): PropertyOwner!
     deleteOwner(id: ID!): String!
 
-    # 🟢 UPDATED: Added $Floor: String
-    createProperty(type: String!, name: String!, img: [String]!, video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput!, rera: String!, cc: Boolean!, mutation: Boolean!, furnished: Boolean!, carpetarea: String!, superbuilderarea: String!, landarea: String!, propertyAge: Float, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, Floor: String, description: String!, amenities: [String]!, ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput): Property!
-    
-    # 🟢 UPDATED: Added $Floor: String
-    updateProperty(id: ID!, type: String, name: String, img: [String], video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput, rera: String, cc: Boolean, mutation: Boolean, furnished: Boolean, carpetarea: String, superbuilderarea: String, landarea: String, propertyAge: Float, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, Floor: String, description: String, amenities: [String], ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput): Property!
-    
+    createProperty(type: String!, name: String!, img: [String]!, video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput!, rera: String!, cc: Boolean!, mutation: Boolean!, furnished: Boolean!, carpetarea: String!, superbuilderarea: String!, landarea: String!, propertyAge: String, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, Floor: String, description: String!, amenities: [String]!, ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput): Property!
+    updateProperty(id: ID!, type: String, name: String, img: [String], video: [String], price: String, maintenanceCost: String, rental: Boolean, selling: Boolean, propertypapers: [String], address: AddressInput, rera: String, cc: Boolean, mutation: Boolean, furnished: Boolean, carpetarea: String, superbuilderarea: String, landarea: String, propertyAge: String, verified: Boolean, noofbedrooms: String, noofbathrooms: String, noofhalls: String, noofkitchens: String, noofdrawingrooms: String, noofbalcony: String, noofparking: String, Floor: String, description: String, amenities: [String], ownedby: ID, brokerOwnerDetails: BrokerOwnerDetailsInput, assignedBrokers: [ID], visibilitySettings: VisibilitySettingsInput): Property!
     deleteProperty(id: ID!): String!
 
     createTenant(input: TenantInput!): Tenant!
